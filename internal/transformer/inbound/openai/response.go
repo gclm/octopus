@@ -1040,7 +1040,7 @@ func convertInputToMessages(input *ResponsesInput) ([]model.Message, error) {
 	if input.Text != nil {
 		return []model.Message{
 			{
-				Role: "user",
+				Role:"user",
 				Content: model.MessageContent{
 					Content: input.Text,
 				},
@@ -1048,19 +1048,91 @@ func convertInputToMessages(input *ResponsesInput) ([]model.Message, error) {
 		}, nil
 	}
 
-	// Array of items
+	// Array of items — use look-ahead to merge reasoning+function_call+message
 	messages := make([]model.Message, 0, len(input.Items))
-	for _, item := range input.Items {
-		msg, err := convertItemToMessage(&item)
+	i := 0
+	for i < len(input.Items) {
+		item := &input.Items[i]
+		if item.Type == "reasoning" {
+			msg, consumed, err := convertReasoningWithFollowing(input.Items, i)
+			if err != nil {
+				return nil, err
+			}
+			if msg != nil {
+				messages = append(messages, *msg)
+			}
+			i += consumed
+			continue
+		}
+		msg, err := convertItemToMessage(item)
 		if err != nil {
 			return nil, err
 		}
 		if msg != nil {
 			messages = append(messages, *msg)
 		}
+		i++
 	}
 
 	return messages, nil
+}
+
+// convertReasoningWithFollowing converts a reasoning item and merges it with subsequent
+// function_call or assistant message items into a single assistant message.
+// Returns the merged message and the number of items consumed.
+func convertReasoningWithFollowing(items []ResponsesItem, startIdx int) (*model.Message, int, error) {
+	if startIdx >= len(items) || items[startIdx].Type != "reasoning" {
+		return nil, 0, nil
+	}
+
+	reasoningItem := &items[startIdx]
+	msg := &model.Message{
+		Role:               "assistant",
+		ReasoningSignature: reasoningItem.EncryptedContent,
+	}
+
+	var reasoningText strings.Builder
+	for _, summary := range reasoningItem.Summary {
+		reasoningText.WriteString(summary.Text)
+	}
+	if reasoningText.Len() > 0 {
+		msg.ReasoningContent = lo.ToPtr(reasoningText.String())
+	}
+
+	consumed := 1
+
+	for i := startIdx + 1; i < len(items); i++ {
+		next := &items[i]
+		switch next.Type {
+		case "function_call":
+			msg.ToolCalls = append(msg.ToolCalls, model.ToolCall{
+				ID:   next.CallID,
+				Type: "function",
+				Function: model.FunctionCall{
+					Name:      next.Name,
+					Arguments: next.Arguments,
+				},
+			})
+			consumed++
+		case "message", "input_text", "":
+			if next.Role == "assistant" {
+				if next.Content != nil && len(next.Content.Items) > 0 && next.isOutputMessageContent() {
+					msg.Content = convertContentItemsToMessageContent(next.GetContentItems())
+				} else if next.Content != nil {
+					msg.Content = convertInputToMessageContent(*next.Content)
+				} else if next.Text != nil {
+					msg.Content = model.MessageContent{Content: next.Text}
+				}
+				consumed++
+			} else {
+				return msg, consumed, nil
+			}
+		default:
+			return msg, consumed, nil
+		}
+	}
+
+	return msg, consumed, nil
 }
 
 func convertItemToMessage(item *ResponsesItem) (*model.Message, error) {
@@ -1234,6 +1306,22 @@ func convertToolsToInternal(tools []ResponsesTool) ([]model.Tool, error) {
 					Quality:           tool.Quality,
 					Size:              tool.Size,
 					OutputCompression: tool.OutputCompression,
+				},
+			})
+
+		case "custom":
+			// Pass custom tools through as function type so downstream providers can handle them.
+			// The type is preserved in the function name prefix if needed by the outbound transformer.
+			params, err := json.Marshal(tool.Parameters)
+			if err != nil {
+				params = []byte("{}")
+			}
+			result = append(result, model.Tool{
+				Type: "function",
+				Function: model.Function{
+					Name:        tool.Name,
+					Description: tool.Description,
+					Parameters:  params,
 				},
 			})
 		}

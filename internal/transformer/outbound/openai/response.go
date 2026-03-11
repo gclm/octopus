@@ -326,7 +326,8 @@ type ResponsesItem struct {
 	Size         *string `json:"size,omitempty"`
 
 	// Reasoning fields
-	Summary []ResponsesReasoningSummary `json:"summary,omitempty"`
+	Summary          []ResponsesReasoningSummary `json:"summary,omitempty"`
+	EncryptedContent *string                     `json:"encrypted_content,omitempty"`
 }
 
 type ResponsesReasoningSummary struct {
@@ -587,6 +588,22 @@ func convertUserMessageToResponses(msg model.Message) ResponsesItem {
 
 func convertAssistantMessageToResponses(msg model.Message) []ResponsesItem {
 	var items []ResponsesItem
+
+	// Handle reasoning: emit a reasoning item when ReasoningSignature is present
+	if msg.ReasoningSignature != nil {
+		var summary []ResponsesReasoningSummary
+		if msg.ReasoningContent != nil && *msg.ReasoningContent != "" {
+			summary = append(summary, ResponsesReasoningSummary{
+				Type: "summary_text",
+				Text: *msg.ReasoningContent,
+			})
+		}
+		items = append(items, ResponsesItem{
+			Type:             "reasoning",
+			EncryptedContent: msg.ReasoningSignature,
+			Summary:          summary,
+		})
+	}
 
 	// Handle tool calls
 	for _, tc := range msg.ToolCalls {
