@@ -122,3 +122,15 @@ jobs:
           labels: ${{ steps.meta-debian.outputs.labels }}
           build-args: |
             TARGETPLATFORM
+
+  trigger-tap-update:
+    name: Trigger Homebrew Tap Update
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger update-formulas workflow
+        run: |
+          gh api repos/gclm/homebrew-tap/actions/workflows/update-formulas.yml/dispatches \
+            -f ref=main
+        env:
+          GH_TOKEN: ${{ secrets.TAP_TOKEN }}
