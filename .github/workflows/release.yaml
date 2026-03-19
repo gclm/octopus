@@ -6,8 +6,13 @@ on:
       - 'v*'
   workflow_dispatch:
     inputs:
-      tag:
-        description: 'Tag to release (e.g., v0.9.26)'
+      branch:
+        description: 'Branch to build (e.g., dev, main)'
+        required: true
+        default: 'dev'
+        type: string
+      version:
+        description: 'Version to release (e.g., 0.9.26)'
         required: true
         type: string
 
@@ -25,19 +30,33 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Determine tag
-        id: tag
+      - name: Determine version info
+        id: version
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            TAG="${{ github.event.inputs.tag }}"
+            BRANCH="${{ github.event.inputs.branch }}"
+            VERSION="${{ github.event.inputs.version }}"
+            TAG="v${VERSION}"
           else
             TAG="${GITHUB_REF#refs/tags/}"
+            VERSION="${TAG#v}"
+            BRANCH="${{ github.sha }}"
           fi
-          echo "TAG_NAME=$TAG" >> $GITHUB_OUTPUT
-          echo "VERSION=${TAG#v}" >> $GITHUB_OUTPUT
+          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
 
-      - name: Checkout tag
-        run: git checkout ${{ steps.tag.outputs.TAG_NAME }}
+      - name: Checkout branch (manual trigger)
+        if: github.event_name == 'workflow_dispatch'
+        run: git checkout ${{ steps.version.outputs.branch }}
+
+      - name: Create tag (manual trigger)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "${{ steps.version.outputs.tag }}" -m "Release ${{ steps.version.outputs.tag }}"
+          git push origin "${{ steps.version.outputs.tag }}"
 
       - name: Setup Go
         uses: actions/setup-go@v6
@@ -69,7 +88,7 @@ jobs:
         with:
           files: build/archives/*
           prerelease: false
-          tag_name: ${{ steps.tag.outputs.TAG_NAME }}
+          tag_name: ${{ steps.version.outputs.tag }}
 
       - name: Docker meta
         id: meta
@@ -78,7 +97,7 @@ jobs:
           images: ghcr.io/${{ github.repository }}
           tags: |
             type=raw,value=latest
-            type=raw,value=${{ steps.tag.outputs.VERSION }}
+            type=raw,value=${{ steps.version.outputs.version }}
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
