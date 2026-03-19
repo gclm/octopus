@@ -6,11 +6,6 @@ on:
       - 'v*'
   workflow_dispatch:
     inputs:
-      branch:
-        description: 'Branch to build (e.g., dev, main)'
-        required: true
-        default: 'dev'
-        type: string
       version:
         description: 'Version to release (e.g., 0.9.26)'
         required: true
@@ -34,21 +29,14 @@ jobs:
         id: version
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            BRANCH="${{ github.event.inputs.branch }}"
             VERSION="${{ github.event.inputs.version }}"
             TAG="v${VERSION}"
           else
             TAG="${GITHUB_REF#refs/tags/}"
             VERSION="${TAG#v}"
-            BRANCH="${{ github.sha }}"
           fi
-          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "tag=$TAG" >> $GITHUB_OUTPUT
-
-      - name: Checkout branch (manual trigger)
-        if: github.event_name == 'workflow_dispatch'
-        run: git checkout ${{ steps.version.outputs.branch }}
 
       - name: Create tag (manual trigger)
         if: github.event_name == 'workflow_dispatch'
