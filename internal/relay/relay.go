@@ -22,6 +22,11 @@ import (
 	"github.com/tmaxmax/go-sse"
 )
 
+const (
+	ResponsesEndpointContextKey = "responses_endpoint"
+	ResponsesEndpointCompact    = "compact"
+)
+
 // Handler 处理入站请求并转发到上游服务
 func Handler(inboundType inbound.InboundType, c *gin.Context) {
 	// 解析请求
@@ -108,6 +113,16 @@ func Handler(inboundType inbound.InboundType, c *gin.Context) {
 
 		// 出站适配器
 		outAdapter := outbound.Get(channel.Type)
+		if endpoint, ok := c.Get(ResponsesEndpointContextKey); ok && endpoint == ResponsesEndpointCompact {
+			if channel.Type != outbound.OutboundTypeOpenAIResponse {
+				iter.Skip(channel.ID, usedKey.ID, channel.Name, "channel type not compatible with compact request")
+				continue
+			}
+			isOpenAIResponsesFlow := inboundType == inbound.InboundTypeOpenAIResponse && channel.Type == outbound.OutboundTypeOpenAIResponse
+			if isOpenAIResponsesFlow {
+				outAdapter = outbound.NewOpenAICompactResponse()
+			}
+		}
 		if outAdapter == nil {
 			iter.Skip(channel.ID, usedKey.ID, channel.Name, fmt.Sprintf("unsupported channel type: %d", channel.Type))
 			continue
