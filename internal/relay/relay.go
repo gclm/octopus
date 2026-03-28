@@ -73,6 +73,9 @@ func Handler(inboundType inbound.InboundType, c *gin.Context) {
 		requestModel:    requestModel,
 		iter:            iter,
 	}
+	if endpoint, ok := c.Get(ResponsesEndpointContextKey); ok && endpoint == ResponsesEndpointCompact {
+		req.isCompact = true
+	}
 
 	var lastErr error
 
@@ -109,6 +112,16 @@ func Handler(inboundType inbound.InboundType, c *gin.Context) {
 		// 熔断检查
 		if iter.SkipCircuitBreak(channel.ID, usedKey.ID, channel.Name) {
 			continue
+		}
+		if req.isCompact {
+			if unsupported, remaining := balancer.IsCompactUnsupported(channel.ID, item.ModelName); unsupported {
+				msg := "compact endpoint unsupported"
+				if remaining > 0 {
+					msg = fmt.Sprintf("compact endpoint unsupported, remaining cooldown: %ds", int(remaining.Seconds()))
+				}
+				iter.Skip(channel.ID, usedKey.ID, channel.Name, msg)
+				continue
+			}
 		}
 
 		// 出站适配器
@@ -200,6 +213,9 @@ func (ra *relayAttempt) attempt() attemptResult {
 		balancer.RecordSuccess(ra.channel.ID, ra.usedKey.ID, ra.internalRequest.Model)
 		// 会话保持：更新粘性记录
 		balancer.SetSticky(ra.apiKeyID, ra.requestModel, ra.channel.ID, ra.usedKey.ID)
+		if ra.isCompact {
+			balancer.MarkCompactSupported(ra.channel.ID, ra.internalRequest.Model)
+		}
 
 		return attemptResult{Success: true}
 	}
@@ -216,6 +232,9 @@ func (ra *relayAttempt) attempt() attemptResult {
 
 	// 熔断器：记录失败
 	balancer.RecordFailure(ra.channel.ID, ra.usedKey.ID, ra.internalRequest.Model)
+	if ra.isCompact && shouldMarkCompactUnsupported(fwdErr) {
+		balancer.MarkCompactUnsupported(ra.channel.ID, ra.internalRequest.Model)
+	}
 
 	written := ra.c.Writer.Written()
 	if written {
@@ -226,6 +245,60 @@ func (ra *relayAttempt) attempt() attemptResult {
 		Written: written,
 		Err:     fmt.Errorf("channel %s failed: %v", ra.channel.Name, fwdErr),
 	}
+}
+
+func shouldMarkCompactUnsupported(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	if !isCompactCapabilityStatus(msg) {
+		return false
+	}
+	if strings.Contains(msg, "model_not_found") {
+		return true
+	}
+	if strings.Contains(msg, "not support") || strings.Contains(msg, "not supported") || strings.Contains(msg, "unsupported") {
+		return true
+	}
+	if strings.Contains(msg, "/responses/compact") {
+		return true
+	}
+	if strings.Contains(msg, "response.compaction") {
+		return true
+	}
+	if containsAny(msg, compactPayloadTooLargeIndicators...) {
+		return true
+	}
+	return false
+}
+
+var compactCapabilityStatuses = []string{
+	"upstream error: 400:",
+	"upstream error: 404:",
+	"upstream error: 405:",
+	"upstream error: 413:",
+	"upstream error: 422:",
+	"upstream error: 503:",
+}
+
+var compactPayloadTooLargeIndicators = []string{
+	"too many tokens",
+	"payload too large",
+	"request entity too large",
+}
+
+func isCompactCapabilityStatus(msg string) bool {
+	return containsAny(msg, compactCapabilityStatuses...)
+}
+
+func containsAny(msg string, patterns ...string) bool {
+	for _, p := range patterns {
+		if strings.Contains(msg, p) {
+			return true
+		}
+	}
+	return false
 }
 
 // parseRequest 解析并验证入站请求
