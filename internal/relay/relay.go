@@ -174,6 +174,9 @@ func (ra *relayAttempt) attempt() attemptResult {
 	ra.usedKey.LastUseTimeStamp = time.Now().Unix()
 
 	if fwdErr == nil {
+		firstTokenMs := span.FirstTokenDuration().Milliseconds()
+		log.Infof("relay attempt finished: channel=%s model=%s status=success attempt_duration_ms=%d first_token_ms=%d",
+			ra.channel.Name, ra.internalRequest.Model, span.Duration().Milliseconds(), firstTokenMs)
 		// ====== 成功 ======
 		ra.collectResponse()
 		ra.usedKey.TotalCost += ra.metrics.Stats.InputCost + ra.metrics.Stats.OutputCost
@@ -188,13 +191,16 @@ func (ra *relayAttempt) attempt() attemptResult {
 		})
 
 		// 熔断器：记录成功
-		balancer.RecordSuccess(ra.channel.ID, ra.usedKey.ID, ra.internalRequest.Model, ra.metrics.FirstTokenTime.Sub(ra.metrics.StartTime))
+		balancer.RecordSuccess(ra.channel.ID, ra.usedKey.ID, ra.internalRequest.Model, span.FirstTokenDuration())
 		// 会话保持：更新粘性记录
 		balancer.SetSticky(ra.apiKeyID, ra.requestModel, ra.channel.ID, ra.usedKey.ID)
 
 		return attemptResult{Success: true}
 	}
 
+	firstTokenMs := span.FirstTokenDuration().Milliseconds()
+	log.Warnf("relay attempt finished: channel=%s model=%s status=failed attempt_duration_ms=%d first_token_ms=%d err=%v",
+		ra.channel.Name, ra.internalRequest.Model, span.Duration().Milliseconds(), firstTokenMs, fwdErr)
 	// ====== 失败 ======
 	op.ChannelKeyUpdate(ra.usedKey)
 	span.End(dbmodel.AttemptFailed, statusCode, fwdErr.Error())
@@ -399,7 +405,11 @@ func (ra *relayAttempt) handleStreamResponse(ctx context.Context, response *http
 				continue
 			}
 			if firstToken {
-				ra.metrics.SetFirstTokenTime(time.Now())
+				if span := ra.iter.CurrentAttempt(); span != nil {
+					firstTokenDuration := span.MarkFirstToken()
+					ra.metrics.SetFirstTokenTime(time.Now())
+					log.Infof("relay first token: channel=%s model=%s first_token_ms=%d", ra.channel.Name, ra.internalRequest.Model, firstTokenDuration.Milliseconds())
+				}
 				firstToken = false
 				if firstTokenTimer != nil {
 					if !firstTokenTimer.Stop() {

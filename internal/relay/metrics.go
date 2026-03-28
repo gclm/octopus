@@ -93,19 +93,37 @@ func (m *RelayMetrics) Save(ctx context.Context, success bool, err error, attemp
 	}
 
 	channelID, channelName := finalChannel(attempts)
+	firstTokenMs := int64(0)
+	if !m.FirstTokenTime.IsZero() {
+		firstTokenMs = m.FirstTokenTime.Sub(m.StartTime).Milliseconds()
+	}
+	lastAttemptDurationMs := 0
+	lastAttemptStatus := "none"
+	if len(attempts) > 0 {
+		lastAttemptDurationMs = attempts[len(attempts)-1].Duration
+		lastAttemptStatus = string(attempts[len(attempts)-1].Status)
+	}
+
 	op.StatsTotalUpdate(globalStats)
 	op.StatsHourlyUpdate(globalStats)
 	op.StatsDailyUpdate(context.Background(), globalStats)
 	op.StatsAPIKeyUpdate(m.APIKeyID, globalStats)
 	op.StatsChannelUpdate(channelID, globalStats)
 
-	log.Infof("relay complete: model=%s, channel=%d(%s), success=%t, duration=%dms, input_token=%d, output_token=%d, input_cost=%f, output_cost=%f, total_cost=%f, attempts=%d",
-		m.RequestModel, channelID, channelName, success, duration.Milliseconds(),
+	log.Infof("relay complete: request_model=%s actual_model=%s channel=%d(%s) success=%t request_duration_ms=%d request_first_token_ms=%d last_attempt_duration_ms=%d last_attempt_status=%s input_token=%d output_token=%d input_cost=%f output_cost=%f total_cost=%f attempts=%d",
+		m.RequestModel, actualModelName(m.RequestModel, m.ActualModel), channelID, channelName, success, duration.Milliseconds(), firstTokenMs, lastAttemptDurationMs, lastAttemptStatus,
 		m.Stats.InputToken, m.Stats.OutputToken,
 		m.Stats.InputCost, m.Stats.OutputCost, m.Stats.InputCost+m.Stats.OutputCost,
 		len(attempts))
 
 	m.saveLog(ctx, err, duration, attempts, channelID, channelName)
+}
+
+func actualModelName(requestModel, actualModel string) string {
+	if actualModel != "" {
+		return actualModel
+	}
+	return requestModel
 }
 
 func finalChannel(attempts []model.ChannelAttempt) (int, string) {

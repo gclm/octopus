@@ -19,6 +19,7 @@ type Iterator struct {
 	// 内嵌追踪
 	attempts []model.ChannelAttempt
 	count    int
+	active   *AttemptSpan
 }
 
 // NewIterator 创建负载均衡迭代器
@@ -163,7 +164,7 @@ func (it *Iterator) SkipCircuitBreak(channelID, channelKeyID int, channelName st
 // StartAttempt 开始一次真实转发尝试，返回 Span 用于记录结果
 func (it *Iterator) StartAttempt(channelID, channelKeyID int, channelName string) *AttemptSpan {
 	it.count++
-	return &AttemptSpan{
+	span := &AttemptSpan{
 		attempt: model.ChannelAttempt{
 			ChannelID:    channelID,
 			ChannelKeyID: channelKeyID,
@@ -175,6 +176,8 @@ func (it *Iterator) StartAttempt(channelID, channelKeyID int, channelName string
 		startTime: time.Now(),
 		iter:      it,
 	}
+	it.active = span
+	return span
 }
 
 // Attempts 返回所有决策记录（交给日志模块持久化）
@@ -184,10 +187,16 @@ func (it *Iterator) Attempts() []model.ChannelAttempt {
 
 // AttemptSpan 管理单次通道尝试的生命周期（计时、状态、结果）
 type AttemptSpan struct {
-	attempt   model.ChannelAttempt
-	startTime time.Time
-	iter      *Iterator
-	ended     bool
+	attempt      model.ChannelAttempt
+	startTime    time.Time
+	firstTokenAt time.Time
+	statusCode   int
+	iter         *Iterator
+	ended        bool
+}
+
+func (it *Iterator) CurrentAttempt() *AttemptSpan {
+	return it.active
 }
 
 // End 结束尝试：设置状态，自动计算耗时，追加到 Iterator
@@ -196,10 +205,28 @@ func (s *AttemptSpan) End(status model.AttemptStatus, statusCode int, msg string
 		return
 	}
 	s.ended = true
+	s.statusCode = statusCode
 	s.attempt.Status = status
 	s.attempt.Duration = int(time.Since(s.startTime).Milliseconds())
 	s.attempt.Msg = msg
 	s.iter.attempts = append(s.iter.attempts, s.attempt)
+	if s.iter.active == s {
+		s.iter.active = nil
+	}
+}
+
+func (s *AttemptSpan) MarkFirstToken() time.Duration {
+	if s.firstTokenAt.IsZero() {
+		s.firstTokenAt = time.Now()
+	}
+	return s.firstTokenAt.Sub(s.startTime)
+}
+
+func (s *AttemptSpan) FirstTokenDuration() time.Duration {
+	if s.firstTokenAt.IsZero() {
+		return 0
+	}
+	return s.firstTokenAt.Sub(s.startTime)
 }
 
 // Duration 返回从开始到现在的耗时
