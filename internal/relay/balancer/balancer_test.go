@@ -143,10 +143,11 @@ func TestWeightedCandidates_StableTopOrderWithoutDiversifyRotation(t *testing.T)
 	}
 
 	w := &Weighted{}
+	expectedTopID := 1 // all scores tie; deterministic tiebreakers pick the smallest ChannelID first.
 	for i := 0; i < 3; i++ {
 		got := w.Candidates(items)
-		if got[0].ChannelID != 1 {
-			t.Fatalf("expected stable deterministic top candidate channel 1, got %d", got[0].ChannelID)
+		if got[0].ChannelID != expectedTopID {
+			t.Fatalf("expected stable deterministic top candidate channel %d, got %d", expectedTopID, got[0].ChannelID)
 		}
 	}
 }

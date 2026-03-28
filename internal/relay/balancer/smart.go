@@ -133,6 +133,7 @@ func smartBucketIndex(minute int64) int {
 	return idx
 }
 
+// resetSmartStatsForTest clears all in-memory smart routing stats; test-only helper.
 func resetSmartStatsForTest() {
 	smartChannelStats = sync.Map{}
 }

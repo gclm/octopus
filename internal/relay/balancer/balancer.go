@@ -85,7 +85,8 @@ func (b *Weighted) Candidates(items []model.GroupItem) []model.GroupItem {
 
 	// 构建智能择优排序：
 	// score = 手动权重(30%) + 近1h成功率(50%) + 近24h成功率(20%)
-	// 若近1h有失败记录，则对1h分量做 /3 惩罚，快速压低短时不稳定通道。
+	// 若近1h有失败记录，则对1h分量按 smartOneHourPenaltyDivisor（当前为 3.0）做除法惩罚，
+	// 以快速压低短时不稳定通道。
 	// 同分时按权重、优先级稳定排序，避免抖动。
 	type scoredItem struct {
 		item   model.GroupItem
