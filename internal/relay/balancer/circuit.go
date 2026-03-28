@@ -1,7 +1,12 @@
 package balancer
 
 import (
+	"crypto/x509"
+	"errors"
 	"fmt"
+	"net"
+	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -10,13 +15,37 @@ import (
 	"github.com/bestruirui/octopus/internal/utils/log"
 )
 
+var testSettingIntOverride func(model.SettingKey) (int, bool)
+
 // CircuitState 熔断器状态
 type CircuitState int
 
 const (
-	StateClosed   CircuitState = iota // 正常通行
-	StateOpen                         // 熔断中，拒绝所有请求
-	StateHalfOpen                     // 半开，仅允许单个试探请求
+	StateClosed CircuitState = iota // 正常通行
+	StateOpen                       // 熔断中，拒绝所有请求
+	StateHalfOpen                   // 半开，仅允许单个试探请求
+)
+
+type FailureKind string
+
+const (
+	FailureUnknown           FailureKind = "unknown"
+	FailureFirstTokenTimeout FailureKind = "first_token_timeout"
+	FailureNetworkTimeout    FailureKind = "network_timeout"
+	FailureTLSError          FailureKind = "tls_error"
+	FailureAuthError         FailureKind = "auth_error"
+	FailureModelNotFound     FailureKind = "model_not_found"
+	FailureUpstream5xx       FailureKind = "upstream_5xx"
+	FailureProtocolError     FailureKind = "protocol_error"
+	FailureNetworkError      FailureKind = "network_error"
+	FailureClientError       FailureKind = "client_error"
+)
+
+const (
+	defaultHealthScoreMin = -100
+	defaultHealthScoreMax = 100
+	defaultHealthDecayStep = 5
+	defaultHealthDecayInterval = 10 * time.Minute
 )
 
 // circuitEntry 单个熔断器条目
@@ -24,7 +53,11 @@ type circuitEntry struct {
 	State               CircuitState
 	ConsecutiveFailures int64
 	LastFailureTime     time.Time
+	LastSuccessTime     time.Time
 	TripCount           int // 累计熔断触发次数（用于指数退避）
+	HealthScore         int
+	LastFailureKind     FailureKind
+	OpenUntil           time.Time
 	mu                  sync.Mutex
 }
 
@@ -48,6 +81,11 @@ func getOrCreateEntry(key string) *circuitEntry {
 
 // getThreshold 获取熔断阈值配置
 func getThreshold() int64 {
+	if testSettingIntOverride != nil {
+		if v, ok := testSettingIntOverride(model.SettingKeyCircuitBreakerThreshold); ok && v > 0 {
+			return int64(v)
+		}
+	}
 	v, err := op.SettingGetInt(model.SettingKeyCircuitBreakerThreshold)
 	if err != nil || v <= 0 {
 		return 5
@@ -55,8 +93,155 @@ func getThreshold() int64 {
 	return int64(v)
 }
 
-// GetCooldown 获取当前冷却时间（带指数退避）
-func GetCooldown(tripCount int) time.Duration {
+func getHealthScoreThreshold() int {
+	if testSettingIntOverride != nil {
+		if v, ok := testSettingIntOverride(model.SettingKeyCircuitBreakerHealthScoreThreshold); ok {
+			if v >= 0 {
+				return -50
+			}
+			return v
+		}
+	}
+	v, err := op.SettingGetInt(model.SettingKeyCircuitBreakerHealthScoreThreshold)
+	if err != nil || v >= 0 {
+		return -50
+	}
+	return v
+}
+
+func getHealthScoreRange() (int, int) {
+	if testSettingIntOverride != nil {
+		minV, okMin := testSettingIntOverride(model.SettingKeyCircuitBreakerHealthScoreMin)
+		maxV, okMax := testSettingIntOverride(model.SettingKeyCircuitBreakerHealthScoreMax)
+		if okMin && okMax {
+			if minV >= maxV {
+				return defaultHealthScoreMin, defaultHealthScoreMax
+			}
+			return minV, maxV
+		}
+	}
+	minV, err := op.SettingGetInt(model.SettingKeyCircuitBreakerHealthScoreMin)
+	if err != nil {
+		minV = defaultHealthScoreMin
+	}
+	maxV, err := op.SettingGetInt(model.SettingKeyCircuitBreakerHealthScoreMax)
+	if err != nil {
+		maxV = defaultHealthScoreMax
+	}
+	if minV >= maxV {
+		return defaultHealthScoreMin, defaultHealthScoreMax
+	}
+	return minV, maxV
+}
+
+func getHealthDecayStep() int {
+	if testSettingIntOverride != nil {
+		if v, ok := testSettingIntOverride(model.SettingKeyCircuitBreakerHealthScoreDecayStep); ok && v > 0 {
+			return v
+		}
+	}
+	v, err := op.SettingGetInt(model.SettingKeyCircuitBreakerHealthScoreDecayStep)
+	if err != nil || v <= 0 {
+		return defaultHealthDecayStep
+	}
+	return v
+}
+
+func getHealthDecayInterval() time.Duration {
+	if testSettingIntOverride != nil {
+		if v, ok := testSettingIntOverride(model.SettingKeyCircuitBreakerHealthScoreDecayIntervalSeconds); ok && v > 0 {
+			return time.Duration(v) * time.Second
+		}
+	}
+	v, err := op.SettingGetInt(model.SettingKeyCircuitBreakerHealthScoreDecayIntervalSeconds)
+	if err != nil || v <= 0 {
+		return defaultHealthDecayInterval
+	}
+	return time.Duration(v) * time.Second
+}
+
+func decayHealthScore(score int, lastUpdated, now time.Time) int {
+	if score == 0 || lastUpdated.IsZero() || !now.After(lastUpdated) {
+		return score
+	}
+	interval := getHealthDecayInterval()
+	if interval <= 0 {
+		return score
+	}
+	step := getHealthDecayStep()
+	steps := int(now.Sub(lastUpdated) / interval)
+	if steps <= 0 {
+		return score
+	}
+	decay := steps * step
+	if score > 0 {
+		score -= decay
+		if score < 0 {
+			score = 0
+		}
+		return score
+	}
+	score += decay
+	if score > 0 {
+		score = 0
+	}
+	return score
+}
+
+func (e *circuitEntry) applyDecay(now time.Time) {
+	updatedAt := e.LastSuccessTime
+	if e.LastFailureTime.After(updatedAt) {
+		updatedAt = e.LastFailureTime
+	}
+	e.HealthScore = clampHealthScore(decayHealthScore(e.HealthScore, updatedAt, now))
+}
+
+// GetCooldown 获取当前冷却时间（带指数退避与动态惩罚）
+func GetCooldown(tripCount int, kind FailureKind, healthScore int) time.Duration {
+	if testSettingIntOverride != nil {
+		base, okBase := testSettingIntOverride(model.SettingKeyCircuitBreakerCooldown)
+		maxCooldown, okMax := testSettingIntOverride(model.SettingKeyCircuitBreakerMaxCooldown)
+		if okBase && okMax {
+			if base <= 0 {
+				base = 60
+			}
+			if maxCooldown <= 0 {
+				maxCooldown = 600
+			}
+			cooldown := base
+			if tripCount > 1 {
+				shift := tripCount - 1
+				if shift > 20 {
+					shift = 20
+				}
+				cooldown = base << shift
+			}
+			switch kind {
+			case FailureTLSError, FailureAuthError:
+				if cooldown < 1800 {
+					cooldown = 1800
+				}
+			case FailureModelNotFound:
+				if cooldown < 3600 {
+					cooldown = 3600
+				}
+			case FailureFirstTokenTimeout:
+				if cooldown < 900 {
+					cooldown = 900
+				}
+			}
+			if healthScore <= getHealthScoreThreshold() && cooldown < 600 {
+				cooldown = 600
+			}
+			if healthScore <= -80 && cooldown < 1800 {
+				cooldown = 1800
+			}
+			if cooldown > maxCooldown {
+				cooldown = maxCooldown
+			}
+			return time.Duration(cooldown) * time.Second
+		}
+	}
 	base, err := op.SettingGetInt(model.SettingKeyCircuitBreakerCooldown)
 	if err != nil || base <= 0 {
 		base = 60
@@ -75,6 +260,35 @@ func GetCooldown(tripCount int) time.Duration {
 		}
 		cooldown = base << shift
 	}
+
+	// 对确定性错误给出更强惩罚。
+	switch kind {
+	case FailureTLSError, FailureAuthError:
+		if cooldown < 1800 {
+			cooldown = 1800
+		}
+	case FailureModelNotFound:
+		if cooldown < 3600 {
+			cooldown = 3600
+		}
+	case FailureFirstTokenTimeout:
+		if cooldown < 900 {
+			cooldown = 900
+		}
+	}
+
+	// 长期健康分过低时，至少进入更长冷却。
+	if healthScore <= getHealthScoreThreshold() {
+		if cooldown < 600 {
+			cooldown = 600
+		}
+	}
+	if healthScore <= -80 {
+		if cooldown < 1800 {
+			cooldown = 1800
+		}
+	}
+
 	if cooldown > maxCooldown {
 		cooldown = maxCooldown
 	}
@@ -94,21 +308,24 @@ func IsTripped(channelID, keyID int, modelName string) (tripped bool, remaining 
 
 	entry.mu.Lock()
 	defer entry.mu.Unlock()
+	entry.applyDecay(time.Now())
 
 	switch entry.State {
 	case StateClosed:
 		return false, 0
 
 	case StateOpen:
-		cooldown := GetCooldown(entry.TripCount)
-		elapsed := time.Since(entry.LastFailureTime)
-		if elapsed >= cooldown {
+		cooldown := GetCooldown(entry.TripCount, entry.LastFailureKind, entry.HealthScore)
+		remaining = time.Until(entry.OpenUntil)
+		if entry.OpenUntil.IsZero() {
+			remaining = cooldown - time.Since(entry.LastFailureTime)
+		}
+		if remaining <= 0 {
 			entry.State = StateHalfOpen
-			log.Infof("circuit breaker [%s] Open -> HalfOpen (cooldown %v elapsed)", key, cooldown)
+			log.Infof("circuit breaker [%s] Open -> HalfOpen (cooldown %v elapsed, health=%d, kind=%s)", key, cooldown, entry.HealthScore, entry.LastFailureKind)
 			return false, 0
 		}
-		// 仍在冷却中
-		return true, cooldown - elapsed
+		return true, remaining
 
 	case StateHalfOpen:
 		// 已有试探请求在进行中，拒绝其他请求
@@ -119,59 +336,223 @@ func IsTripped(channelID, keyID int, modelName string) (tripped bool, remaining 
 	}
 }
 
-// RecordSuccess 记录成功，重置熔断器状态
-func RecordSuccess(channelID, keyID int, modelName string) {
-	key := circuitKey(channelID, keyID, modelName)
-	v, ok := globalBreaker.Load(key)
-	if !ok {
-		return
+func clampHealthScore(score int) int {
+	minScore, maxScore := getHealthScoreRange()
+	if score < minScore {
+		return minScore
 	}
-	entry := v.(*circuitEntry)
+	if score > maxScore {
+		return maxScore
+	}
+	return score
+}
+
+func healthDeltaForSuccess(firstToken time.Duration) int {
+	if firstToken > 0 && firstToken <= 1500*time.Millisecond {
+		return 5
+	}
+	return 3
+}
+
+func healthDeltaForFailure(kind FailureKind) int {
+	switch kind {
+	case FailureTLSError, FailureAuthError:
+		return -50
+	case FailureModelNotFound:
+		return -30
+	case FailureFirstTokenTimeout:
+		return -20
+	case FailureNetworkTimeout:
+		return -15
+	case FailureProtocolError:
+		return -20
+	case FailureUpstream5xx:
+		return -10
+	case FailureClientError:
+		return -10
+	case FailureNetworkError:
+		return -15
+	default:
+		return -10
+	}
+}
+
+// RecordSuccess 记录成功，重置熔断器状态并恢复健康分。
+func RecordSuccess(channelID, keyID int, modelName string, firstToken time.Duration) {
+	key := circuitKey(channelID, keyID, modelName)
+	entry := getOrCreateEntry(key)
 
 	entry.mu.Lock()
 	defer entry.mu.Unlock()
+	entry.applyDecay(time.Now())
 
 	if entry.State == StateHalfOpen {
-		log.Infof("circuit breaker [%s] HalfOpen -> Closed (probe succeeded)", key)
+		log.Infof("circuit breaker [%s] HalfOpen -> Closed (probe succeeded, health=%d)", key, entry.HealthScore)
 	}
 
-	// 重置全部状态
 	entry.State = StateClosed
 	entry.ConsecutiveFailures = 0
 	entry.TripCount = 0
+	entry.LastSuccessTime = time.Now()
+	entry.LastFailureKind = FailureUnknown
+	entry.OpenUntil = time.Time{}
+	entry.HealthScore = clampHealthScore(entry.HealthScore + healthDeltaForSuccess(firstToken))
 }
 
-// RecordFailure 记录失败，可能触发熔断
-func RecordFailure(channelID, keyID int, modelName string) {
+// RecordFailure 记录失败，结合错误类型、健康分和指数退避决定冷却时长。
+func RecordFailure(channelID, keyID int, modelName string, kind FailureKind) {
 	key := circuitKey(channelID, keyID, modelName)
 	entry := getOrCreateEntry(key)
 
 	entry.mu.Lock()
 	defer entry.mu.Unlock()
 
-	entry.LastFailureTime = time.Now()
+	now := time.Now()
+	entry.applyDecay(now)
+	entry.LastFailureTime = now
+	entry.LastFailureKind = kind
+	entry.HealthScore = clampHealthScore(entry.HealthScore + healthDeltaForFailure(kind))
 
 	switch entry.State {
 	case StateClosed:
 		entry.ConsecutiveFailures++
 		threshold := getThreshold()
-		if entry.ConsecutiveFailures >= threshold {
+		if entry.ConsecutiveFailures >= threshold || entry.HealthScore <= getHealthScoreThreshold() || isFatalFailure(kind) {
 			entry.State = StateOpen
 			entry.TripCount++
-			log.Warnf("circuit breaker [%s] Closed -> Open (failures=%d >= threshold=%d, tripCount=%d, cooldown=%v)",
-				key, entry.ConsecutiveFailures, threshold, entry.TripCount, GetCooldown(entry.TripCount))
+			cooldown := GetCooldown(entry.TripCount, kind, entry.HealthScore)
+			entry.OpenUntil = now.Add(cooldown)
+			log.Warnf("circuit breaker [%s] Closed -> Open (failures=%d threshold=%d tripCount=%d cooldown=%v kind=%s health=%d)",
+				key, entry.ConsecutiveFailures, threshold, entry.TripCount, cooldown, kind, entry.HealthScore)
 		}
 
 	case StateHalfOpen:
-		// 试探失败，重新进入 Open 状态，TripCount 递增（冷却时间翻倍）
 		entry.State = StateOpen
 		entry.TripCount++
-		entry.ConsecutiveFailures = 0 // 重新开始计数
-		log.Warnf("circuit breaker [%s] HalfOpen -> Open (probe failed, tripCount=%d, cooldown=%v)",
-			key, entry.TripCount, GetCooldown(entry.TripCount))
+		entry.ConsecutiveFailures = 0
+		cooldown := GetCooldown(entry.TripCount, kind, entry.HealthScore)
+		entry.OpenUntil = now.Add(cooldown)
+		log.Warnf("circuit breaker [%s] HalfOpen -> Open (probe failed tripCount=%d cooldown=%v kind=%s health=%d)",
+			key, entry.TripCount, cooldown, kind, entry.HealthScore)
 
 	case StateOpen:
-		// 理论上不应该在 Open 状态下接收到失败记录（请求应被拒绝），
-		// 但为安全起见仍更新失败时间
+		cooldown := GetCooldown(entry.TripCount, kind, entry.HealthScore)
+		entry.OpenUntil = now.Add(cooldown)
 	}
+}
+
+func isFatalFailure(kind FailureKind) bool {
+	switch kind {
+	case FailureTLSError, FailureAuthError, FailureModelNotFound:
+		return true
+	default:
+		return false
+	}
+}
+
+// HealthScore 返回当前候选健康分，用于排序惩罚。
+func HealthScore(channelID, keyID int, modelName string) int {
+	if keyID == 0 {
+		best := 0
+		found := false
+		globalBreaker.Range(func(k, v any) bool {
+			entryKey, ok := k.(string)
+			if !ok {
+				return true
+			}
+			prefix := fmt.Sprintf("%d:", channelID)
+			suffix := fmt.Sprintf(":%s", modelName)
+			if !strings.HasPrefix(entryKey, prefix) || !strings.HasSuffix(entryKey, suffix) {
+				return true
+			}
+			entry := v.(*circuitEntry)
+			entry.mu.Lock()
+			score := entry.HealthScore
+			entry.mu.Unlock()
+			if !found || score > best {
+				best = score
+				found = true
+			}
+			return true
+		})
+		if found {
+			return best
+		}
+	}
+
+	key := circuitKey(channelID, keyID, modelName)
+	v, ok := globalBreaker.Load(key)
+	if !ok {
+		return 0
+	}
+	entry := v.(*circuitEntry)
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
+	entry.applyDecay(time.Now())
+	return entry.HealthScore
+}
+
+func HealthInfo(channelID, keyID int, modelName string) (score int, kind FailureKind, remaining time.Duration, state CircuitState, ok bool) {
+	key := circuitKey(channelID, keyID, modelName)
+	v, exists := globalBreaker.Load(key)
+	if !exists {
+		return 0, FailureUnknown, 0, StateClosed, false
+	}
+	entry := v.(*circuitEntry)
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
+	now := time.Now()
+	entry.applyDecay(now)
+	remaining = time.Until(entry.OpenUntil)
+	if remaining < 0 {
+		remaining = 0
+	}
+	return entry.HealthScore, entry.LastFailureKind, remaining, entry.State, true
+}
+
+func ClassifyFailure(err error, statusCode int) FailureKind {
+	if statusCode == http.StatusUnauthorized || statusCode == http.StatusForbidden {
+		return FailureAuthError
+	}
+	if statusCode == http.StatusNotFound {
+		return FailureModelNotFound
+	}
+	if statusCode >= 500 {
+		return FailureUpstream5xx
+	}
+	if statusCode >= 400 {
+		return FailureClientError
+	}
+
+	if err == nil {
+		return FailureUnknown
+	}
+
+	msg := strings.ToLower(err.Error())
+	if strings.Contains(msg, "first token timeout") {
+		return FailureFirstTokenTimeout
+	}
+	if strings.Contains(msg, "non-sse content-type") || strings.Contains(msg, "transform stream") {
+		return FailureProtocolError
+	}
+	if strings.Contains(msg, "context deadline exceeded") || strings.Contains(msg, "client.timeout exceeded") {
+		return FailureNetworkTimeout
+	}
+
+	var certErr x509.UnknownAuthorityError
+	if errors.As(err, &certErr) || strings.Contains(msg, "certificate signed by unknown authority") || strings.Contains(msg, "x509:") {
+		return FailureTLSError
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) {
+		if netErr.Timeout() {
+			return FailureNetworkTimeout
+		}
+		return FailureNetworkError
+	}
+	if strings.Contains(msg, "connection refused") || strings.Contains(msg, "no such host") || strings.Contains(msg, "tls:") {
+		return FailureNetworkError
+	}
+
+	return FailureUnknown
 }

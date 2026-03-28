@@ -125,10 +125,16 @@ func Handler(inboundType inbound.InboundType, c *gin.Context) {
 
 		// 设置实际模型
 		internalRequest.Model = item.ModelName
+		health, failureKind, cooldownRemaining, _, hasHealth := balancer.HealthInfo(channel.ID, usedKey.ID, item.ModelName)
+		effectivePriority := balancer.EffectivePriorityFor(channel.ID, usedKey.ID, item)
+		if !hasHealth {
+			health = 0
+			failureKind = balancer.FailureUnknown
+		}
 
-		log.Infof("request model %s, mode: %d, forwarding to channel: %s model: %s (attempt %d/%d, sticky=%t)",
+		log.Infof("request model %s, mode: %d, forwarding to channel: %s model: %s (attempt %d/%d, sticky=%t, priority=%d, effective_priority=%d, health=%d, last_failure_kind=%s, cooldown_remaining_ms=%d)",
 			requestModel, group.Mode, channel.Name, item.ModelName,
-			iter.Index()+1, iter.Len(), iter.IsSticky())
+			iter.Index()+1, iter.Len(), iter.IsSticky(), item.Priority, effectivePriority, health, failureKind, cooldownRemaining.Milliseconds())
 
 		// 构造尝试级上下文 -- 只写变化的 4 个字段
 		ra := &relayAttempt{
@@ -182,7 +188,7 @@ func (ra *relayAttempt) attempt() attemptResult {
 		})
 
 		// 熔断器：记录成功
-		balancer.RecordSuccess(ra.channel.ID, ra.usedKey.ID, ra.internalRequest.Model)
+		balancer.RecordSuccess(ra.channel.ID, ra.usedKey.ID, ra.internalRequest.Model, ra.metrics.FirstTokenTime.Sub(ra.metrics.StartTime))
 		// 会话保持：更新粘性记录
 		balancer.SetSticky(ra.apiKeyID, ra.requestModel, ra.channel.ID, ra.usedKey.ID)
 
@@ -200,7 +206,11 @@ func (ra *relayAttempt) attempt() attemptResult {
 	})
 
 	// 熔断器：记录失败
-	balancer.RecordFailure(ra.channel.ID, ra.usedKey.ID, ra.internalRequest.Model)
+	failureKind := balancer.ClassifyFailure(fwdErr, statusCode)
+	balancer.RecordFailure(ra.channel.ID, ra.usedKey.ID, ra.internalRequest.Model, failureKind)
+	updatedHealth, _, updatedCooldown, _, _ := balancer.HealthInfo(ra.channel.ID, ra.usedKey.ID, ra.internalRequest.Model)
+	log.Warnf("relay attempt failed: channel=%s model=%s status=%d failure_kind=%s health=%d cooldown_remaining_ms=%d err=%v",
+		ra.channel.Name, ra.internalRequest.Model, statusCode, failureKind, updatedHealth, updatedCooldown.Milliseconds(), fwdErr)
 
 	written := ra.c.Writer.Written()
 	if written {

@@ -19,6 +19,11 @@ const (
 	SettingKeyCircuitBreakerThreshold   SettingKey = "circuit_breaker_threshold"    // 熔断触发阈值（连续失败次数）
 	SettingKeyCircuitBreakerCooldown    SettingKey = "circuit_breaker_cooldown"     // 熔断基础冷却时间（秒）
 	SettingKeyCircuitBreakerMaxCooldown SettingKey = "circuit_breaker_max_cooldown" // 熔断最大冷却时间（秒），指数退避上限
+	SettingKeyCircuitBreakerHealthScoreThreshold SettingKey = "circuit_breaker_health_score_threshold" // 健康分阈值，低于该值会触发更长冷却
+	SettingKeyCircuitBreakerHealthScoreMin       SettingKey = "circuit_breaker_health_score_min"       // 健康分下限
+	SettingKeyCircuitBreakerHealthScoreMax       SettingKey = "circuit_breaker_health_score_max"       // 健康分上限
+	SettingKeyCircuitBreakerHealthScoreDecayStep SettingKey = "circuit_breaker_health_score_decay_step" // 每次衰减步长
+	SettingKeyCircuitBreakerHealthScoreDecayIntervalSeconds SettingKey = "circuit_breaker_health_score_decay_interval_seconds" // 健康分衰减周期（秒）
 )
 
 type Setting struct {
@@ -38,13 +43,20 @@ func DefaultSettings() []Setting {
 		{Key: SettingKeyCircuitBreakerThreshold, Value: "5"},     // 默认连续失败5次触发熔断
 		{Key: SettingKeyCircuitBreakerCooldown, Value: "60"},     // 默认基础冷却60秒
 		{Key: SettingKeyCircuitBreakerMaxCooldown, Value: "600"}, // 默认最大冷却600秒（10分钟）
+		{Key: SettingKeyCircuitBreakerHealthScoreThreshold, Value: "-50"},
+		{Key: SettingKeyCircuitBreakerHealthScoreMin, Value: "-100"},
+		{Key: SettingKeyCircuitBreakerHealthScoreMax, Value: "100"},
+		{Key: SettingKeyCircuitBreakerHealthScoreDecayStep, Value: "5"},
+		{Key: SettingKeyCircuitBreakerHealthScoreDecayIntervalSeconds, Value: "600"},
 	}
 }
 
 func (s *Setting) Validate() error {
 	switch s.Key {
 	case SettingKeyModelInfoUpdateInterval, SettingKeySyncLLMInterval, SettingKeyRelayLogKeepPeriod,
-		SettingKeyCircuitBreakerThreshold, SettingKeyCircuitBreakerCooldown, SettingKeyCircuitBreakerMaxCooldown:
+		SettingKeyCircuitBreakerThreshold, SettingKeyCircuitBreakerCooldown, SettingKeyCircuitBreakerMaxCooldown,
+		SettingKeyCircuitBreakerHealthScoreThreshold, SettingKeyCircuitBreakerHealthScoreMin, SettingKeyCircuitBreakerHealthScoreMax,
+		SettingKeyCircuitBreakerHealthScoreDecayStep, SettingKeyCircuitBreakerHealthScoreDecayIntervalSeconds:
 		_, err := strconv.Atoi(s.Value)
 		if err != nil {
 			return fmt.Errorf("model info update interval must be an integer")

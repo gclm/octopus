@@ -2,6 +2,7 @@ package balancer
 
 import (
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/bestruirui/octopus/internal/model"
@@ -25,6 +26,7 @@ type Iterator struct {
 func NewIterator(group model.Group, apiKeyID int, requestModel string) *Iterator {
 	b := GetBalancer(group.Mode)
 	candidates := b.Candidates(group.Items)
+	applyHealthOrder(candidates)
 
 	stickyIdx := -1
 	if group.SessionKeepTime > 0 {
@@ -51,6 +53,43 @@ func NewIterator(group model.Group, apiKeyID int, requestModel string) *Iterator
 		stickyIdx:  stickyIdx,
 		modelName:  requestModel,
 	}
+}
+
+func applyHealthOrder(candidates []model.GroupItem) {
+	// 惩罚型全局排序：保留优先级语义，但允许极差健康分在全局范围内适度后移。
+	sort.SliceStable(candidates, func(i, j int) bool {
+		left := candidates[i]
+		right := candidates[j]
+		leftScore := HealthScore(left.ChannelID, 0, left.ModelName)
+		rightScore := HealthScore(right.ChannelID, 0, right.ModelName)
+		leftRank := effectivePriority(left.Priority, leftScore)
+		rightRank := effectivePriority(right.Priority, rightScore)
+		if leftRank != rightRank {
+			return leftRank < rightRank
+		}
+		if leftScore == rightScore {
+			return left.ID < right.ID
+		}
+		return leftScore > rightScore
+	})
+}
+
+func effectivePriority(priority, score int) int {
+	penalty := 0
+	switch {
+	case score <= -80:
+		penalty = 3
+	case score <= -50:
+		penalty = 2
+	case score <= -20:
+		penalty = 1
+	}
+	return priority + penalty
+}
+
+func EffectivePriorityFor(channelID, keyID int, item model.GroupItem) int {
+	score := HealthScore(channelID, keyID, item.ModelName)
+	return effectivePriority(item.Priority, score)
 }
 
 // Next 移动到下一个候选，返回 false 表示遍历完成
@@ -103,7 +142,9 @@ func (it *Iterator) SkipCircuitBreak(channelID, channelKeyID int, channelName st
 	}
 	msg := "circuit breaker tripped"
 	if remaining > 0 {
-		msg = fmt.Sprintf("circuit breaker tripped, remaining cooldown: %ds", int(remaining.Seconds()))
+		health, kind, _, state, _ := HealthInfo(channelID, channelKeyID, modelName)
+		effective := EffectivePriorityFor(channelID, channelKeyID, it.candidates[it.index])
+		msg = fmt.Sprintf("circuit breaker tripped, state: %d, remaining cooldown: %ds, health: %d, failure_kind: %s, effective_priority: %d", int(state), int(remaining.Seconds()), health, kind, effective)
 	}
 	it.count++
 	it.attempts = append(it.attempts, model.ChannelAttempt{
