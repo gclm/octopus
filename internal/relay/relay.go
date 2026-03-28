@@ -301,6 +301,24 @@ func containsAny(msg string, patterns ...string) bool {
 	return false
 }
 
+func formatUpstreamErrorMessage(isCompact bool, requestModel, routedModel, endpointPath string, statusCode int, body []byte) string {
+	base := fmt.Sprintf("upstream error: %d: %s", statusCode, string(body))
+	if !isCompact {
+		return base
+	}
+
+	parts := []string{
+		fmt.Sprintf("request_model=%q", requestModel),
+		fmt.Sprintf("routed_model=%q", routedModel),
+		fmt.Sprintf("endpoint=%q", endpointPath),
+	}
+	bodyText := strings.ToLower(string(body))
+	if strings.Contains(bodyText, "-openai-compact") {
+		parts = append(parts, `note="upstream provider may internally map compact endpoint models to *-openai-compact aliases"`)
+	}
+	return fmt.Sprintf("%s [compact relay context: %s]", base, strings.Join(parts, ", "))
+}
+
 // parseRequest 解析并验证入站请求
 func parseRequest(inboundType inbound.InboundType, c *gin.Context) (*model.InternalLLMRequest, model.Inbound, error) {
 	body, err := io.ReadAll(c.Request.Body)
@@ -359,7 +377,14 @@ func (ra *relayAttempt) forward() (int, error) {
 		if err != nil {
 			return 0, fmt.Errorf("failed to read response body: %w", err)
 		}
-		return 0, fmt.Errorf("upstream error: %d: %s", response.StatusCode, string(body))
+		return 0, fmt.Errorf("%s", formatUpstreamErrorMessage(
+			ra.isCompact,
+			ra.requestModel,
+			ra.internalRequest.Model,
+			outboundRequest.URL.Path,
+			response.StatusCode,
+			body,
+		))
 	}
 
 	// 处理响应
