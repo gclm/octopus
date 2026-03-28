@@ -108,6 +108,11 @@ func Handler(inboundType inbound.InboundType, c *gin.Context) {
 
 		// 出站适配器
 		outAdapter := outbound.Get(channel.Type)
+		if endpoint, ok := c.Get("responses_endpoint"); ok && endpoint == "compact" {
+			if inboundType == inbound.InboundTypeOpenAIResponse && channel.Type == outbound.OutboundTypeOpenAIResponse {
+				outAdapter = outbound.NewOpenAICompactResponse()
+			}
+		}
 		if outAdapter == nil {
 			iter.Skip(channel.ID, usedKey.ID, channel.Name, fmt.Sprintf("unsupported channel type: %d", channel.Type))
 			continue
