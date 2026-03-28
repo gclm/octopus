@@ -106,7 +106,7 @@ jobs:
           context: .
           file: ./scripts/dockerfiles/Dockerfile.alpine
           push: true
-          platforms: linux/amd64,linux/i386,linux/arm64,linux/arm/v7
+          platforms: linux/amd64
           tags: ${{ steps.meta-alpine.outputs.tags }}
           labels: ${{ steps.meta-alpine.outputs.labels }}
           build-args: |
