@@ -18,11 +18,6 @@ import (
 	"github.com/bestruirui/octopus/internal/utils/log"
 )
 
-const (
-	updateUrl    = "https://github.com/bestruirui/octopus/releases/latest/download"
-	updateApiUrl = "https://api.github.com/repos/bestruirui/octopus/releases/latest"
-)
-
 type LatestInfo struct {
 	TagName     string `json:"tag_name"`
 	PublishedAt string `json:"published_at"`
@@ -31,6 +26,16 @@ type LatestInfo struct {
 }
 
 var github_pat = os.Getenv(strings.ToUpper(conf.APP_NAME) + "_GITHUB_PAT")
+
+func latestReleaseDownloadBaseURL() string {
+	return strings.TrimSuffix(conf.Repo, "/") + "/releases/latest/download"
+}
+
+func latestReleaseAPIURL() string {
+	repoURL := strings.TrimSuffix(conf.Repo, "/")
+	apiURL := strings.Replace(repoURL, "https://github.com/", "https://api.github.com/repos/", 1)
+	return apiURL + "/releases/latest"
+}
 
 // doRequestWithFallback performs an HTTP GET request, first without proxy, then with proxy if failed.
 func doRequestWithFallback(url string) ([]byte, error) {
@@ -77,7 +82,7 @@ func doRequest(url string, useProxy bool) ([]byte, error) {
 }
 
 func GetLatestInfo() (*LatestInfo, error) {
-	body, err := doRequestWithFallback(updateApiUrl)
+	body, err := doRequestWithFallback(latestReleaseAPIURL())
 	if err != nil {
 		return nil, err
 	}
