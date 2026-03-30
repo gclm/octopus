@@ -31,6 +31,7 @@ type Channel struct {
 	ParamOverride *string               `json:"param_override"`
 	ChannelProxy  *string               `json:"channel_proxy"`
 	Stats         *StatsChannel         `json:"stats,omitempty" gorm:"foreignKey:ChannelID"`
+	HealthSummary *ChannelHealthSummary `json:"health_summary,omitempty" gorm:"-"`
 	MatchRegex    *string               `json:"match_regex"`
 }
 
@@ -45,14 +46,16 @@ type CustomHeader struct {
 }
 
 type ChannelKey struct {
-	ID               int     `json:"id" gorm:"primaryKey"`
-	ChannelID        int     `json:"channel_id"`
-	Enabled          bool    `json:"enabled" gorm:"default:true"`
-	ChannelKey       string  `json:"channel_key"`
-	StatusCode       int     `json:"status_code"`
-	LastUseTimeStamp int64   `json:"last_use_time_stamp"`
-	TotalCost        float64 `json:"total_cost"`
-	Remark           string  `json:"remark"`
+	ID               int                      `json:"id" gorm:"primaryKey"`
+	ChannelID        int                      `json:"channel_id"`
+	Enabled          bool                     `json:"enabled" gorm:"default:true"`
+	ChannelKey       string                   `json:"channel_key"`
+	StatusCode       int                      `json:"status_code"`
+	LastUseTimeStamp int64                    `json:"last_use_time_stamp"`
+	TotalCost        float64                  `json:"total_cost"`
+	Remark           string                   `json:"remark"`
+	HealthSummary    *ChannelKeyHealthSummary `json:"health_summary,omitempty" gorm:"-"`
+	HealthRoutes     []ChannelHealthRoute     `json:"health_routes,omitempty" gorm:"-"`
 }
 
 // ChannelUpdateRequest 渠道更新请求 - 仅包含变更的数据

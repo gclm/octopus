@@ -10,6 +10,7 @@ import (
 	"github.com/bestruirui/octopus/internal/helper"
 	"github.com/bestruirui/octopus/internal/model"
 	"github.com/bestruirui/octopus/internal/op"
+	"github.com/bestruirui/octopus/internal/relay/balancer"
 	"github.com/bestruirui/octopus/internal/server/middleware"
 	"github.com/bestruirui/octopus/internal/server/resp"
 	"github.com/bestruirui/octopus/internal/server/router"
@@ -63,9 +64,8 @@ func listChannel(c *gin.Context) {
 		resp.Error(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	for i, channel := range channels {
-		stats := op.StatsChannelGet(channel.ID)
-		channels[i].Stats = &stats
+	for i := range channels {
+		enrichChannelRuntime(&channels[i])
 	}
 	resp.Success(c, channels)
 }
@@ -80,8 +80,7 @@ func createChannel(c *gin.Context) {
 		resp.Error(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	stats := op.StatsChannelGet(channel.ID)
-	channel.Stats = &stats
+	enrichChannelRuntime(&channel)
 	go func(channel *model.Channel) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
@@ -105,8 +104,10 @@ func updateChannel(c *gin.Context) {
 		resp.Error(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	stats := op.StatsChannelGet(channel.ID)
-	channel.Stats = &stats
+	if shouldResetChannelState(&req) {
+		balancer.ResetChannelState(channel.ID)
+	}
+	enrichChannelRuntime(channel)
 	go func(channel *model.Channel) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
@@ -132,6 +133,7 @@ func enableChannel(c *gin.Context) {
 		resp.Error(c, http.StatusInternalServerError, err.Error())
 		return
 	}
+	balancer.ResetChannelState(request.ID)
 	resp.Success(c, nil)
 }
 
@@ -146,8 +148,32 @@ func deleteChannel(c *gin.Context) {
 		resp.Error(c, http.StatusInternalServerError, err.Error())
 		return
 	}
+	balancer.ResetChannelState(idNum)
 	resp.Success(c, nil)
 }
+
+func shouldResetChannelState(req *model.ChannelUpdateRequest) bool {
+	if req == nil {
+		return false
+	}
+	if req.Enabled != nil || req.Type != nil || req.BaseUrls != nil || req.Model != nil || req.CustomModel != nil {
+		return true
+	}
+	if req.Proxy != nil || req.CustomHeader != nil || req.ChannelProxy != nil || req.ParamOverride != nil {
+		return true
+	}
+	return len(req.KeysToAdd) > 0 || len(req.KeysToUpdate) > 0 || len(req.KeysToDelete) > 0
+}
+
+func enrichChannelRuntime(channel *model.Channel) {
+	if channel == nil {
+		return
+	}
+	stats := op.StatsChannelGet(channel.ID)
+	channel.Stats = &stats
+	balancer.SnapshotChannelRuntimeHealth(channel)
+}
+
 func fetchModel(c *gin.Context) {
 	var request model.Channel
 	if err := c.ShouldBindJSON(&request); err != nil {

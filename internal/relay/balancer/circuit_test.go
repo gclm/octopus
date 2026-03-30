@@ -14,6 +14,7 @@ import (
 func prepareCircuitTest(t *testing.T) {
 	t.Helper()
 	globalBreaker = sync.Map{}
+	globalSession = sync.Map{}
 	testSettingIntOverride = func(key model.SettingKey) (int, bool) {
 		switch key {
 		case model.SettingKeyCircuitBreakerThreshold:
@@ -32,12 +33,15 @@ func prepareCircuitTest(t *testing.T) {
 			return 5, true
 		case model.SettingKeyCircuitBreakerHealthScoreDecayIntervalSeconds:
 			return 600, true
+		case model.SettingKeyCircuitBreakerHealthScoreWarmupSuccesses:
+			return 3, true
 		default:
 			return 0, false
 		}
 	}
 	t.Cleanup(func() {
 		globalBreaker = sync.Map{}
+		globalSession = sync.Map{}
 		testSettingIntOverride = nil
 	})
 }
@@ -134,5 +138,35 @@ func TestHealthScoreDecayTowardZero(t *testing.T) {
 	score = decayHealthScore(30, time.Now().Add(-31*time.Minute), time.Now())
 	if score != 15 {
 		t.Fatalf("expected decayed score 15, got %d", score)
+	}
+}
+
+func TestAggregatedHealthScoreAppliesDecay(t *testing.T) {
+	prepareCircuitTest(t)
+	key := circuitKey(9, 1, "gpt-5.4")
+	entry := getOrCreateEntry(key)
+	entry.mu.Lock()
+	entry.HealthScore = -30
+	entry.LastFailureTime = time.Now().Add(-31 * time.Minute)
+	entry.mu.Unlock()
+
+	score := HealthScore(9, 0, "gpt-5.4")
+	if score != -15 {
+		t.Fatalf("expected aggregated decayed score -15, got %d", score)
+	}
+}
+
+func TestResetChannelStateClearsBreakerAndSticky(t *testing.T) {
+	prepareCircuitTest(t)
+	RecordFailure(11, 1, "gpt-5.4", FailureNetworkTimeout)
+	SetSticky(123, "gpt-5.4", 11, 1)
+
+	ResetChannelState(11)
+
+	if _, ok := globalBreaker.Load(circuitKey(11, 1, "gpt-5.4")); ok {
+		t.Fatal("expected breaker entry to be removed")
+	}
+	if sticky := GetSticky(123, "gpt-5.4", time.Minute); sticky != nil {
+		t.Fatal("expected sticky session to be removed")
 	}
 }

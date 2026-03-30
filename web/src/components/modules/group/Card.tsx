@@ -75,7 +75,8 @@ export function GroupCard({ group }: { group: Group }) {
     const { data: modelChannels = [] } = useModelChannelList();
 
     const [confirmDelete, setConfirmDelete] = useState(false);
-    const [members, setMembers] = useState<SelectedMember[]>([]);
+    const [draftMembers, setDraftMembers] = useState<SelectedMember[] | null>(null);
+    const [draftBaseVersion, setDraftBaseVersion] = useState('');
     const isDragging = useRef(false);
     const weightTimerRef = useRef<NodeJS.Timeout | null>(null);
     const membersRef = useRef<SelectedMember[]>([]);
@@ -103,10 +104,15 @@ export function GroupCard({ group }: { group: Group }) {
             })),
         [group.items, channelNameByKey, enabledByKey]
     );
-
-    useEffect(() => {
-        if (!isDragging.current) setMembers([...displayMembers]);
-    }, [displayMembers]);
+    const displayMembersVersion = useMemo(
+        () => JSON.stringify(displayMembers.map((member) => ({
+            id: member.id,
+            item_id: member.item_id,
+            weight: member.weight ?? 1,
+        }))),
+        [displayMembers]
+    );
+    const members = draftMembers && draftBaseVersion === displayMembersVersion ? draftMembers : displayMembers;
 
     useEffect(() => {
         membersRef.current = members;
@@ -137,6 +143,10 @@ export function GroupCard({ group }: { group: Group }) {
 
     const handleDragStart = useCallback(() => { isDragging.current = true; }, []);
     const handleDragFinish = useCallback(() => { isDragging.current = false; }, []);
+    const handleMembersReorder = useCallback((nextMembers: SelectedMember[]) => {
+        setDraftBaseVersion(displayMembersVersion);
+        setDraftMembers(nextMembers);
+    }, [displayMembersVersion]);
 
     const handleDropReorder = useCallback((nextMembers: SelectedMember[]) => {
         const itemsToUpdate = nextMembers
@@ -156,7 +166,8 @@ export function GroupCard({ group }: { group: Group }) {
     }, [members, group.id, updateGroup, onSuccess, onError]);
 
     const handleWeightChange = useCallback((id: string, weight: number) => {
-        setMembers((prev) => prev.map((m) => m.id === id ? { ...m, weight } : m));
+        setDraftBaseVersion(displayMembersVersion);
+        setDraftMembers(members.map((m) => m.id === id ? { ...m, weight } : m));
         if (weightTimerRef.current) clearTimeout(weightTimerRef.current);
         weightTimerRef.current = setTimeout(() => {
             const member = membersRef.current.find((m) => m.id === id);
@@ -168,7 +179,7 @@ export function GroupCard({ group }: { group: Group }) {
                 { onSuccess, onError }
             );
         }, 500);
-    }, [group.id, priorityByItemId, updateGroup, onSuccess, onError]);
+    }, [displayMembersVersion, group.id, members, priorityByItemId, updateGroup, onSuccess, onError]);
 
     const handleSubmitEdit = useCallback((values: GroupEditorValues, onDone?: () => void) => {
         if (!group.id) return;
@@ -340,7 +351,7 @@ export function GroupCard({ group }: { group: Group }) {
             <section className="rounded-xl border border-border/50 bg-muted/30 overflow-hidden relative h-101">
                 <MemberList
                     members={members}
-                    onReorder={setMembers}
+                    onReorder={handleMembersReorder}
                     onRemove={handleRemoveMember}
                     onWeightChange={handleWeightChange}
                     onDragStart={handleDragStart}

@@ -61,8 +61,8 @@ func applyHealthOrder(candidates []model.GroupItem) {
 	sort.SliceStable(candidates, func(i, j int) bool {
 		left := candidates[i]
 		right := candidates[j]
-		leftScore := HealthScore(left.ChannelID, 0, left.ModelName)
-		rightScore := HealthScore(right.ChannelID, 0, right.ModelName)
+		leftScore := OrderingHealthScore(left.ChannelID, 0, left.ModelName)
+		rightScore := OrderingHealthScore(right.ChannelID, 0, right.ModelName)
 		leftRank := effectivePriority(left.Priority, leftScore)
 		rightRank := effectivePriority(right.Priority, rightScore)
 		if leftRank != rightRank {
@@ -89,7 +89,7 @@ func effectivePriority(priority, score int) int {
 }
 
 func EffectivePriorityFor(channelID, keyID int, item model.GroupItem) int {
-	score := HealthScore(channelID, keyID, item.ModelName)
+	score := OrderingHealthScore(channelID, keyID, item.ModelName)
 	return effectivePriority(item.Priority, score)
 }
 

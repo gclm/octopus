@@ -170,6 +170,10 @@
         },
         "circuitBreaker": {
             "title": "熔断器配置",
+            "sections": {
+                "basic": "基础保护",
+                "health": "健康分治理"
+            },
             "threshold": {
                 "label": "熔断触发阈值（连续失败次数）",
                 "placeholder": "请输入阈值"
@@ -182,7 +186,31 @@
                 "label": "最大冷却时间（秒）",
                 "placeholder": "请输入最大冷却时间"
             },
-            "hint": "当渠道连续失败达到阈值后触发熔断，冷却时间按指数退避增长，上限为最大冷却时间"
+            "healthScoreThreshold": {
+                "label": "健康分长冷却阈值",
+                "placeholder": "请输入负向阈值，例如 -50"
+            },
+            "healthScoreMin": {
+                "label": "健康分下限",
+                "placeholder": "请输入最小值"
+            },
+            "healthScoreMax": {
+                "label": "健康分上限",
+                "placeholder": "请输入最大值"
+            },
+            "healthScoreDecayStep": {
+                "label": "健康分每次衰减步长",
+                "placeholder": "请输入衰减步长"
+            },
+            "healthScoreDecayIntervalSeconds": {
+                "label": "健康分衰减周期（秒）",
+                "placeholder": "请输入衰减周期"
+            },
+            "healthScoreWarmupSuccesses": {
+                "label": "观察期成功样本数",
+                "placeholder": "请输入成功样本数，0 表示关闭观察期"
+            },
+            "hint": "基础熔断负责短时隔离；健康分负责长期降权。观察期内的新渠道或新 key 会先以中性分参与，避免少量成功样本过早抢占流量。"
         },
         "saved": "已保存",
         "backup": {
@@ -457,12 +485,52 @@
                 "disabled": "渠道已禁用"
             }
         },
+        "health": {
+            "status": {
+                "idle": "无运行信号",
+                "neutral": "中性",
+                "healthy": "健康",
+                "degraded": "降权中",
+                "cooling": "冷却中",
+                "warming": "观察期"
+            },
+            "labels": {
+                "status": "当前状态",
+                "routingScore": "路由分",
+                "coolingRoutes": "冷却路由",
+                "warmupRoutes": "观察期路由",
+                "trackedRoutes": "已跟踪路由",
+                "trackedKeys": "已跟踪密钥",
+                "worstRawScore": "最差原始分",
+                "cooldown": "剩余冷却",
+                "scoreShort": "分数"
+            },
+            "score": "分数",
+            "routes": "{count} 条路由",
+            "cooldown": "冷却 {time}",
+            "warmup": "{count} 条观察中",
+            "noSignals": "该渠道还没有运行时健康样本",
+            "moreRoutes": "还有 {count} 条",
+            "failures": {
+                "unknown": "未知失败",
+                "first_token_timeout": "首包超时",
+                "network_timeout": "网络超时",
+                "tls_error": "TLS 错误",
+                "auth_error": "鉴权失败",
+                "model_not_found": "模型不存在",
+                "upstream_5xx": "上游 5xx",
+                "protocol_error": "协议错误",
+                "network_error": "网络错误",
+                "client_error": "客户端错误"
+            }
+        },
         "detail": {
             "title": {
                 "edit": "编辑渠道",
                 "view": "渠道详情"
             },
             "sections": {
+                "health": "健康治理",
                 "requests": "请求详情",
                 "tokens": "Token 使用",
                 "costs": "成本详情",

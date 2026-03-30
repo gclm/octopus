@@ -95,13 +95,20 @@ func Handler(inboundType inbound.InboundType, c *gin.Context) {
 			continue
 		}
 
-		usedKey := channel.GetChannelKey()
+		usedKey, keyAvailable := balancer.SelectChannelKey(channel, item.ModelName)
 		if usedKey.ChannelKey == "" {
 			iter.Skip(channel.ID, 0, channel.Name, "no available key")
 			continue
 		}
 
 		// 熔断检查
+		if !keyAvailable {
+			if iter.SkipCircuitBreak(channel.ID, usedKey.ID, channel.Name) {
+				continue
+			}
+			iter.Skip(channel.ID, usedKey.ID, channel.Name, "no available key")
+			continue
+		}
 		if iter.SkipCircuitBreak(channel.ID, usedKey.ID, channel.Name) {
 			continue
 		}
@@ -193,7 +200,9 @@ func (ra *relayAttempt) attempt() attemptResult {
 		// 熔断器：记录成功
 		balancer.RecordSuccess(ra.channel.ID, ra.usedKey.ID, ra.internalRequest.Model, span.FirstTokenDuration())
 		// 会话保持：更新粘性记录
-		balancer.SetSticky(ra.apiKeyID, ra.requestModel, ra.channel.ID, ra.usedKey.ID)
+		if balancer.ReadyForSticky(ra.channel.ID, ra.usedKey.ID, ra.internalRequest.Model) {
+			balancer.SetSticky(ra.apiKeyID, ra.requestModel, ra.channel.ID, ra.usedKey.ID)
+		}
 
 		return attemptResult{Success: true}
 	}

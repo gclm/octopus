@@ -9,7 +9,11 @@ import {
     Activity,
     TrendingUp,
     Globe,
-    Key
+    Key,
+    Gauge,
+    Snowflake,
+    TimerReset,
+    ShieldAlert,
 } from 'lucide-react';
 import { useUpdateChannel, useDeleteChannel, type Channel, type UpdateChannelRequest } from '@/api/endpoints/channel';
 import {
@@ -26,6 +30,7 @@ import { ChannelForm, type ChannelFormData } from './Form';
 import { formatMoney } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { formatCooldown, formatSignedScore, getDisplaySummaryScore, getHealthTone, getRouteDisplayScore, healthBadgeClassName } from './health';
 
 export function CardContent({ channel, stats }: { channel: Channel; stats: StatsMetricsFormatted }) {
     const { setIsOpen } = useMorphingDialog();
@@ -60,6 +65,9 @@ export function CardContent({ channel, stats }: { channel: Channel; stats: Stats
         match_regex: channel.match_regex ?? '',
     });
     const t = useTranslations('channel.detail');
+    const tHealth = useTranslations('channel.health');
+    const health = channel.health_summary;
+    const healthScore = getDisplaySummaryScore(health);
 
     const currentView = isEditing ? 'editing' : 'viewing';
 
@@ -220,6 +228,84 @@ export function CardContent({ channel, stats }: { channel: Channel; stats: Stats
                                     </div>
                                 </dl>
 
+                                <section className="space-y-3">
+                                    <h4 className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                                        <Gauge className="size-3.5" />
+                                        {t('sections.health')}
+                                    </h4>
+                                    <dl className="grid gap-3 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
+                                        <div className="rounded-2xl border bg-card p-3 sm:p-4 transition-colors hover:bg-accent/5">
+                                            <dt className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
+                                                <ShieldAlert className="size-4" />
+                                                {tHealth('labels.status')}
+                                            </dt>
+                                            <dd>
+                                                <Badge variant="secondary" className={cn('text-xs', getHealthTone(health?.status))}>
+                                                    {tHealth(`status.${health?.status ?? 'idle'}`)}
+                                                </Badge>
+                                            </dd>
+                                        </div>
+
+                                        <div className="rounded-2xl border bg-card p-3 sm:p-4 transition-colors hover:bg-accent/5">
+                                            <dt className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
+                                                <Gauge className="size-4 text-primary" />
+                                                {tHealth('labels.routingScore')}
+                                            </dt>
+                                            <dd className="text-2xl font-bold text-card-foreground">
+                                                {formatSignedScore(healthScore)}
+                                            </dd>
+                                        </div>
+
+                                        <div className="rounded-2xl border bg-card p-3 sm:p-4 transition-colors hover:bg-accent/5">
+                                            <dt className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
+                                                <Snowflake className="size-4 text-destructive" />
+                                                {tHealth('labels.coolingRoutes')}
+                                            </dt>
+                                            <dd className="text-2xl font-bold text-card-foreground">
+                                                {health?.cooling_routes ?? 0}
+                                            </dd>
+                                        </div>
+
+                                        <div className="rounded-2xl border bg-card p-3 sm:p-4 transition-colors hover:bg-accent/5">
+                                            <dt className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
+                                                <TimerReset className="size-4 text-sky-500" />
+                                                {tHealth('labels.warmupRoutes')}
+                                            </dt>
+                                            <dd className="text-2xl font-bold text-card-foreground">
+                                                {health?.warmup_routes ?? 0}
+                                            </dd>
+                                        </div>
+                                    </dl>
+
+                                    <div className="rounded-2xl border bg-card p-3 sm:p-4">
+                                        {health && health.tracked_routes > 0 ? (
+                                            <div className="flex flex-wrap gap-2">
+                                                <Badge variant="secondary" className="h-6 px-2 text-xs">
+                                                    {tHealth('labels.trackedRoutes')}: {health.tracked_routes}
+                                                </Badge>
+                                                <Badge variant="secondary" className="h-6 px-2 text-xs">
+                                                    {tHealth('labels.trackedKeys')}: {health.tracked_keys}
+                                                </Badge>
+                                                <Badge variant="secondary" className="h-6 px-2 text-xs">
+                                                    {tHealth('labels.worstRawScore')}: {formatSignedScore(health.worst_raw_score)}
+                                                </Badge>
+                                                {health.cooldown_remaining_ms > 0 && (
+                                                    <Badge variant="secondary" className="h-6 px-2 text-xs bg-red-500/10 text-red-700 dark:text-red-400">
+                                                        {tHealth('labels.cooldown')}: {formatCooldown(health.cooldown_remaining_ms)}
+                                                    </Badge>
+                                                )}
+                                                {health.last_failure_kind && health.last_failure_kind !== 'unknown' && (
+                                                    <Badge variant="secondary" className="h-6 px-2 text-xs">
+                                                        {tHealth(`failures.${health.last_failure_kind}` as never)}
+                                                    </Badge>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <div className="text-sm text-muted-foreground">{tHealth('noSignals')}</div>
+                                        )}
+                                    </div>
+                                </section>
+
                                 {/* 请求详情 */}
                                 <section className="space-y-3">
                                     <h4 className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
@@ -354,52 +440,110 @@ export function CardContent({ channel, stats }: { channel: Channel; stats: Stats
                                     </h4>
                                     <div className="rounded-2xl border bg-card overflow-hidden">
                                         {channel.keys?.map((key) => (
-                                            <div key={key.id} className="flex items-center gap-3 p-3 sm:p-4 border-b last:border-0 hover:bg-accent/5 transition-colors">
-                                                <div className={cn("size-2 shrink-0 rounded-full", key.enabled ? "bg-emerald-500" : "bg-destructive")} />
+                                            <div key={key.id} className="border-b last:border-0 p-3 sm:p-4 transition-colors hover:bg-accent/5">
+                                                <div className="flex items-center gap-3">
+                                                    <div className={cn("size-2 shrink-0 rounded-full", key.enabled ? "bg-emerald-500" : "bg-destructive")} />
 
-                                                <span className="font-mono text-sm truncate min-w-0 flex-1">
-                                                    {key.channel_key.length > 10
-                                                        ? `${key.channel_key.slice(0, 4)}...${key.channel_key.slice(-4)}`
-                                                        : key.channel_key}
-                                                </span>
-
-                                                {key.remark && (
-                                                    <span className="text-xs text-muted-foreground truncate max-w-24" title={key.remark}>
-                                                        {key.remark}
+                                                    <span className="font-mono text-sm truncate min-w-0 flex-1">
+                                                        {key.channel_key.length > 10
+                                                            ? `${key.channel_key.slice(0, 4)}...${key.channel_key.slice(-4)}`
+                                                            : key.channel_key}
                                                     </span>
-                                                )}
 
-                                                <div className="flex items-center gap-2 shrink-0">
-                                                    {key.last_use_time_stamp > 0 && (
-                                                        <span className="text-xs text-muted-foreground whitespace-nowrap hidden sm:inline-block">
-                                                            {new Date(key.last_use_time_stamp * 1000).toLocaleString()}
+                                                    {key.remark && (
+                                                        <span className="text-xs text-muted-foreground truncate max-w-24" title={key.remark}>
+                                                            {key.remark}
                                                         </span>
                                                     )}
 
-                                                    {key.status_code !== 0 && (
-                                                        <Badge
-                                                            variant="secondary"
-                                                            className={cn(
-                                                                "h-5 px-1.5 text-[10px]",
-                                                                key.status_code === 200
-                                                                    ? "bg-green-500/15 text-green-700 dark:text-green-400"
-                                                                    : key.status_code === 401 ||
-                                                                        key.status_code === 403 ||
-                                                                        key.status_code === 429 ||
-                                                                        key.status_code >= 500
-                                                                        ? "bg-red-500/15 text-red-700 dark:text-red-400"
-                                                                        : "bg-orange-500/15 text-orange-700 dark:text-orange-400"
-                                                            )}
-                                                        >
-                                                            {key.status_code}
-                                                        </Badge>
-                                                    )}
+                                                    <div className="flex items-center gap-2 shrink-0">
+                                                        {key.last_use_time_stamp > 0 && (
+                                                            <span className="text-xs text-muted-foreground whitespace-nowrap hidden sm:inline-block">
+                                                                {new Date(key.last_use_time_stamp * 1000).toLocaleString()}
+                                                            </span>
+                                                        )}
 
-                                                    <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">
-                                                        {formatMoney(key.total_cost).formatted.value}
-                                                        {formatMoney(key.total_cost).formatted.unit}
-                                                    </Badge>
+                                                        {key.status_code !== 0 && (
+                                                            <Badge
+                                                                variant="secondary"
+                                                                className={cn(
+                                                                    "h-5 px-1.5 text-[10px]",
+                                                                    key.status_code === 200
+                                                                        ? "bg-green-500/15 text-green-700 dark:text-green-400"
+                                                                        : key.status_code === 401 ||
+                                                                            key.status_code === 403 ||
+                                                                            key.status_code === 429 ||
+                                                                            key.status_code >= 500
+                                                                            ? "bg-red-500/15 text-red-700 dark:text-red-400"
+                                                                            : "bg-orange-500/15 text-orange-700 dark:text-orange-400"
+                                                                )}
+                                                            >
+                                                                {key.status_code}
+                                                            </Badge>
+                                                        )}
+
+                                                        <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">
+                                                            {formatMoney(key.total_cost).formatted.value}
+                                                            {formatMoney(key.total_cost).formatted.unit}
+                                                        </Badge>
+                                                    </div>
                                                 </div>
+
+                                                {!!key.health_summary && key.health_summary.tracked_routes > 0 && (
+                                                    <div className="mt-3 space-y-2">
+                                                        <div className="flex flex-wrap gap-2">
+                                                            <Badge variant="secondary" className={healthBadgeClassName(key.health_summary.status)}>
+                                                                {tHealth(`status.${key.health_summary.status}` as never)}
+                                                            </Badge>
+                                                            <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">
+                                                                {tHealth('labels.routingScore')}: {formatSignedScore(getDisplaySummaryScore(key.health_summary))}
+                                                            </Badge>
+                                                            {key.health_summary.cooldown_remaining_ms > 0 && (
+                                                                <Badge variant="secondary" className="h-5 px-1.5 text-[10px] bg-red-500/10 text-red-700 dark:text-red-400">
+                                                                    {tHealth('labels.cooldown')}: {formatCooldown(key.health_summary.cooldown_remaining_ms)}
+                                                                </Badge>
+                                                            )}
+                                                            {key.health_summary.last_failure_kind && key.health_summary.last_failure_kind !== 'unknown' && (
+                                                                <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">
+                                                                    {tHealth(`failures.${key.health_summary.last_failure_kind}` as never)}
+                                                                </Badge>
+                                                            )}
+                                                        </div>
+
+                                                        {!!key.health_routes?.length && (
+                                                            <div className="flex flex-wrap gap-2">
+                                                                {key.health_routes.slice(0, 4).map((route) => (
+                                                                    <div key={`${key.id}-${route.model_name}`} className="rounded-xl border border-border/60 bg-background/80 px-2.5 py-1.5 text-xs">
+                                                                        <div className="font-medium text-foreground">{route.model_name}</div>
+                                                                        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-muted-foreground">
+                                                                            <Badge variant="secondary" className={healthBadgeClassName(route.state === 'open' ? 'cooling' : route.warmup_pending ? 'warming' : route.raw_score < 0 ? 'degraded' : 'healthy')}>
+                                                                                {tHealth(`status.${route.state === 'open' ? 'cooling' : route.warmup_pending ? 'warming' : route.raw_score < 0 ? 'degraded' : route.ordering_score > 0 ? 'healthy' : 'neutral'}` as never)}
+                                                                            </Badge>
+                                                                            <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">
+                                                                                {tHealth('labels.scoreShort')}: {formatSignedScore(getRouteDisplayScore(route))}
+                                                                            </Badge>
+                                                                            {route.cooldown_remaining_ms > 0 && (
+                                                                                <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">
+                                                                                    {formatCooldown(route.cooldown_remaining_ms)}
+                                                                                </Badge>
+                                                                            )}
+                                                                            {route.last_failure_kind !== 'unknown' && (
+                                                                                <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">
+                                                                                    {tHealth(`failures.${route.last_failure_kind}` as never)}
+                                                                                </Badge>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
+                                                                {(key.health_routes?.length ?? 0) > 4 && (
+                                                                    <Badge variant="secondary" className="h-6 px-2 text-xs">
+                                                                        {tHealth('moreRoutes', { count: (key.health_routes?.length ?? 0) - 4 })}
+                                                                    </Badge>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </div>
                                         ))}
                                         {(!channel.keys || channel.keys.length === 0) && (

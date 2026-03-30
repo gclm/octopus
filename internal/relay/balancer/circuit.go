@@ -21,9 +21,9 @@ var testSettingIntOverride func(model.SettingKey) (int, bool)
 type CircuitState int
 
 const (
-	StateClosed CircuitState = iota // 正常通行
-	StateOpen                       // 熔断中，拒绝所有请求
-	StateHalfOpen                   // 半开，仅允许单个试探请求
+	StateClosed   CircuitState = iota // 正常通行
+	StateOpen                         // 熔断中，拒绝所有请求
+	StateHalfOpen                     // 半开，仅允许单个试探请求
 )
 
 type FailureKind string
@@ -42,10 +42,11 @@ const (
 )
 
 const (
-	defaultHealthScoreMin = -100
-	defaultHealthScoreMax = 100
-	defaultHealthDecayStep = 5
-	defaultHealthDecayInterval = 10 * time.Minute
+	defaultHealthScoreMin        = -100
+	defaultHealthScoreMax        = 100
+	defaultHealthDecayStep       = 5
+	defaultHealthDecayInterval   = 10 * time.Minute
+	defaultHealthWarmupSuccesses = 3
 )
 
 // circuitEntry 单个熔断器条目
@@ -56,6 +57,7 @@ type circuitEntry struct {
 	LastSuccessTime     time.Time
 	TripCount           int // 累计熔断触发次数（用于指数退避）
 	HealthScore         int
+	SuccessCount        int64
 	LastFailureKind     FailureKind
 	OpenUntil           time.Time
 	mu                  sync.Mutex
@@ -160,6 +162,25 @@ func getHealthDecayInterval() time.Duration {
 	return time.Duration(v) * time.Second
 }
 
+func getHealthWarmupSuccesses() int {
+	if testSettingIntOverride != nil {
+		if v, ok := testSettingIntOverride(model.SettingKeyCircuitBreakerHealthScoreWarmupSuccesses); ok {
+			if v < 0 {
+				return 0
+			}
+			return v
+		}
+	}
+	v, err := op.SettingGetInt(model.SettingKeyCircuitBreakerHealthScoreWarmupSuccesses)
+	if err != nil {
+		return defaultHealthWarmupSuccesses
+	}
+	if v < 0 {
+		return 0
+	}
+	return v
+}
+
 func decayHealthScore(score int, lastUpdated, now time.Time) int {
 	if score == 0 || lastUpdated.IsZero() || !now.After(lastUpdated) {
 		return score
@@ -194,6 +215,14 @@ func (e *circuitEntry) applyDecay(now time.Time) {
 		updatedAt = e.LastFailureTime
 	}
 	e.HealthScore = clampHealthScore(decayHealthScore(e.HealthScore, updatedAt, now))
+}
+
+func rankingHealthScore(score int, successCount int64) int {
+	warmupSuccesses := getHealthWarmupSuccesses()
+	if warmupSuccesses > 0 && score > 0 && successCount < int64(warmupSuccesses) {
+		return 0
+	}
+	return score
 }
 
 // GetCooldown 获取当前冷却时间（带指数退避与动态惩罚）
@@ -394,6 +423,7 @@ func RecordSuccess(channelID, keyID int, modelName string, firstToken time.Durat
 	entry.ConsecutiveFailures = 0
 	entry.TripCount = 0
 	entry.LastSuccessTime = time.Now()
+	entry.SuccessCount++
 	entry.LastFailureKind = FailureUnknown
 	entry.OpenUntil = time.Time{}
 	entry.HealthScore = clampHealthScore(entry.HealthScore + healthDeltaForSuccess(firstToken))
@@ -455,6 +485,7 @@ func HealthScore(channelID, keyID int, modelName string) int {
 	if keyID == 0 {
 		best := 0
 		found := false
+		now := time.Now()
 		globalBreaker.Range(func(k, v any) bool {
 			entryKey, ok := k.(string)
 			if !ok {
@@ -467,6 +498,7 @@ func HealthScore(channelID, keyID int, modelName string) int {
 			}
 			entry := v.(*circuitEntry)
 			entry.mu.Lock()
+			entry.applyDecay(now)
 			score := entry.HealthScore
 			entry.mu.Unlock()
 			if !found || score > best {
@@ -492,6 +524,53 @@ func HealthScore(channelID, keyID int, modelName string) int {
 	return entry.HealthScore
 }
 
+// OrderingHealthScore returns the score used for routing decisions.
+// Positive scores remain neutral until the candidate has collected enough
+// successful samples to leave warm-up.
+func OrderingHealthScore(channelID, keyID int, modelName string) int {
+	if keyID == 0 {
+		best := 0
+		found := false
+		now := time.Now()
+		globalBreaker.Range(func(k, v any) bool {
+			entryKey, ok := k.(string)
+			if !ok {
+				return true
+			}
+			prefix := fmt.Sprintf("%d:", channelID)
+			suffix := fmt.Sprintf(":%s", modelName)
+			if !strings.HasPrefix(entryKey, prefix) || !strings.HasSuffix(entryKey, suffix) {
+				return true
+			}
+			entry := v.(*circuitEntry)
+			entry.mu.Lock()
+			entry.applyDecay(now)
+			score := rankingHealthScore(entry.HealthScore, entry.SuccessCount)
+			entry.mu.Unlock()
+			if !found || score > best {
+				best = score
+				found = true
+			}
+			return true
+		})
+		if found {
+			return best
+		}
+		return 0
+	}
+
+	key := circuitKey(channelID, keyID, modelName)
+	v, ok := globalBreaker.Load(key)
+	if !ok {
+		return 0
+	}
+	entry := v.(*circuitEntry)
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
+	entry.applyDecay(time.Now())
+	return rankingHealthScore(entry.HealthScore, entry.SuccessCount)
+}
+
 func HealthInfo(channelID, keyID int, modelName string) (score int, kind FailureKind, remaining time.Duration, state CircuitState, ok bool) {
 	key := circuitKey(channelID, keyID, modelName)
 	v, exists := globalBreaker.Load(key)
@@ -508,6 +587,46 @@ func HealthInfo(channelID, keyID int, modelName string) (score int, kind Failure
 		remaining = 0
 	}
 	return entry.HealthScore, entry.LastFailureKind, remaining, entry.State, true
+}
+
+// ResetChannelState clears runtime breaker and sticky state for a channel.
+// This is useful when channel configuration changes materially and old health
+// samples no longer represent the current upstream quality.
+func ResetChannelState(channelID int) {
+	prefix := fmt.Sprintf("%d:", channelID)
+	globalBreaker.Range(func(k, _ any) bool {
+		entryKey, ok := k.(string)
+		if ok && strings.HasPrefix(entryKey, prefix) {
+			globalBreaker.Delete(entryKey)
+		}
+		return true
+	})
+
+	globalSession.Range(func(k, v any) bool {
+		entry, ok := v.(*SessionEntry)
+		if ok && entry.ChannelID == channelID {
+			globalSession.Delete(k)
+		}
+		return true
+	})
+}
+
+func ReadyForSticky(channelID, keyID int, modelName string) bool {
+	warmupSuccesses := getHealthWarmupSuccesses()
+	if warmupSuccesses == 0 {
+		return true
+	}
+
+	key := circuitKey(channelID, keyID, modelName)
+	v, ok := globalBreaker.Load(key)
+	if !ok {
+		return false
+	}
+	entry := v.(*circuitEntry)
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
+	entry.applyDecay(time.Now())
+	return entry.SuccessCount >= int64(warmupSuccesses)
 }
 
 func ClassifyFailure(err error, statusCode int) FailureKind {

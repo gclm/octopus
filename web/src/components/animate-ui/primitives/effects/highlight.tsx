@@ -422,6 +422,14 @@ function HighlightItem<T extends React.ElementType>({
   const isActive = activeValue === childValue;
   const isDisabled = disabled === undefined ? contextDisabled : disabled;
   const itemTransition = transition ?? contextTransition;
+  const itemExitDelaySeconds = (exitDelay ?? contextExitDelay ?? 0) / 1000;
+  const itemExitTransition =
+    itemExitDelaySeconds > 0
+      ? {
+        ...(itemTransition ?? {}),
+        delay: (itemTransition?.delay ?? 0) + itemExitDelaySeconds,
+      }
+      : itemTransition;
 
   const localRef = React.useRef<HTMLDivElement>(null);
   React.useImperativeHandle(ref, () => localRef.current as HTMLDivElement);
@@ -530,6 +538,7 @@ function HighlightItem<T extends React.ElementType>({
               <motion.div
                 layoutId={`transition-background-${contextId}`}
                 data-slot="motion-highlight"
+                exit={{ opacity: 0, transition: itemExitTransition }}
                 style={{
                   position: 'absolute',
                   zIndex: 0,
@@ -581,6 +590,7 @@ function HighlightItem<T extends React.ElementType>({
             <motion.div
               layoutId={`transition-background-${contextId}`}
               data-slot="motion-highlight"
+              exit={{ opacity: 0, transition: itemExitTransition }}
               style={{
                 position: 'absolute',
                 zIndex: 0,

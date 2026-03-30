@@ -4,7 +4,7 @@ import {
     MorphingDialogContainer,
     MorphingDialogContent,
 } from '@/components/ui/morphing-dialog';
-import { CheckCircle2, DollarSign, Key, Layers, MessageSquare, XCircle } from 'lucide-react';
+import { CheckCircle2, DollarSign, Gauge, Key, Layers, MessageSquare, Snowflake, TimerReset, XCircle } from 'lucide-react';
 import { type StatsMetricsFormatted } from '@/api/endpoints/stats';
 import { type Channel, useEnableChannel } from '@/api/endpoints/channel';
 import { CardContent } from './CardContent';
@@ -12,12 +12,15 @@ import { useTranslations } from 'next-intl';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/animate-ui/components/animate/tooltip';
 import { Switch } from '@/components/ui/switch';
 import { toast } from '@/components/common/Toast';
+import { Badge } from '@/components/ui/badge';
+import { formatCooldown, formatSignedScore, getDisplaySummaryScore, healthBadgeClassName } from './health';
 
 export function Card({ channel, stats, layout = 'grid' }: { channel: Channel; stats: StatsMetricsFormatted; layout?: 'grid' | 'list' }) {
     const t = useTranslations('channel.card');
     const tForm = useTranslations('channel.form');
     const tSections = useTranslations('channel.detail.sections');
     const tMetrics = useTranslations('channel.detail.metrics');
+    const tHealth = useTranslations('channel.health');
     const enableChannel = useEnableChannel();
     const isListLayout = layout === 'list';
 
@@ -32,6 +35,8 @@ export function Card({ channel, stats, layout = 'grid' }: { channel: Channel; st
         ...splitModels(channel.custom_model),
     ]).size;
     const enabledKeyCount = channel.keys.filter((item) => item.enabled).length;
+    const health = channel.health_summary;
+    const healthScore = getDisplaySummaryScore(health);
 
     const handleEnableChange = (checked: boolean) => {
         enableChannel.mutate(
@@ -65,6 +70,43 @@ export function Card({ channel, stats, layout = 'grid' }: { channel: Channel; st
                             onClick={(e) => e.stopPropagation()}
                         />
                     </header>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="secondary" className={healthBadgeClassName(health?.status)}>
+                            <Gauge className="mr-1 size-3" />
+                            {tHealth(`status.${health?.status ?? 'idle'}`)}
+                        </Badge>
+                        {!!health && health.tracked_routes > 0 && (
+                            <>
+                                <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">
+                                    {tHealth('score')}: {formatSignedScore(healthScore)}
+                                </Badge>
+                                <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">
+                                    {tHealth('routes', { count: health.tracked_routes })}
+                                </Badge>
+                                {health.cooling_routes > 0 && (
+                                    <Badge variant="secondary" className="h-5 px-1.5 text-[10px] bg-red-500/10 text-red-700 dark:text-red-400">
+                                        <Snowflake className="mr-1 size-3" />
+                                        {tHealth('cooldown', { time: formatCooldown(health.cooldown_remaining_ms) })}
+                                    </Badge>
+                                )}
+                                {health.warmup_routes > 0 && (
+                                    <Badge variant="secondary" className="h-5 px-1.5 text-[10px] bg-sky-500/10 text-sky-700 dark:text-sky-400">
+                                        <TimerReset className="mr-1 size-3" />
+                                        {tHealth('warmup', { count: health.warmup_routes })}
+                                    </Badge>
+                                )}
+                                {health.last_failure_kind && health.last_failure_kind !== 'unknown' && (
+                                    <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">
+                                        {tHealth(`failures.${health.last_failure_kind}` as never)}
+                                    </Badge>
+                                )}
+                            </>
+                        )}
+                        {!!health && health.tracked_routes === 0 && (
+                            <span className="text-xs text-muted-foreground">{tHealth('noSignals')}</span>
+                        )}
+                    </div>
 
                     {isListLayout ? (
                         <dl className="grid grid-cols-2 gap-2 lg:grid-cols-6">

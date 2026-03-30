@@ -44,6 +44,43 @@ export type ChannelKey = {
     last_use_time_stamp: number;
     total_cost: number;
     remark: string;
+    health_summary?: ChannelKeyHealthSummary | null;
+    health_routes?: ChannelHealthRoute[] | null;
+};
+
+export type ChannelHealthSummary = {
+    status: string;
+    best_ordering_score: number;
+    worst_raw_score: number;
+    cooldown_remaining_ms: number;
+    last_failure_kind: string;
+    tracked_routes: number;
+    tracked_keys: number;
+    cooling_routes: number;
+    warmup_routes: number;
+};
+
+export type ChannelKeyHealthSummary = {
+    status: string;
+    best_ordering_score: number;
+    worst_raw_score: number;
+    cooldown_remaining_ms: number;
+    last_failure_kind: string;
+    tracked_routes: number;
+    cooling_routes: number;
+    warmup_routes: number;
+};
+
+export type ChannelHealthRoute = {
+    model_name: string;
+    channel_key_id: number;
+    state: string;
+    raw_score: number;
+    ordering_score: number;
+    success_count: number;
+    warmup_pending: boolean;
+    cooldown_remaining_ms: number;
+    last_failure_kind: string;
 };
 
 /**
@@ -66,13 +103,18 @@ export type Channel = {
     channel_proxy?: string | null;
     match_regex?: string | null;
     stats: StatsChannel;
+    health_summary?: ChannelHealthSummary | null;
 };
 
 // Internal type: backend may return null for slice fields; normalize to [] in select()
+type ChannelKeyServer = Omit<ChannelKey, 'health_routes'> & {
+    health_routes: ChannelHealthRoute[] | null;
+};
+
 type ChannelServer = Omit<Channel, 'base_urls' | 'custom_header' | 'keys'> & {
     base_urls: BaseUrl[] | null;
     custom_header: CustomHeader[] | null;
-    keys: ChannelKey[] | null;
+    keys: ChannelKeyServer[] | null;
 };
 
 /**
@@ -151,7 +193,10 @@ export function useChannelList() {
                 ...item,
                 base_urls: item.base_urls ?? [],
                 custom_header: item.custom_header ?? [],
-                keys: item.keys ?? [],
+                keys: (item.keys ?? []).map((key) => ({
+                    ...key,
+                    health_routes: key.health_routes ?? [],
+                })),
             }) satisfies Channel,
             formatted: {
                 input_token: formatCount(item.stats.input_token),

@@ -22,6 +22,12 @@ export const SettingKey = {
     CircuitBreakerThreshold: 'circuit_breaker_threshold',
     CircuitBreakerCooldown: 'circuit_breaker_cooldown',
     CircuitBreakerMaxCooldown: 'circuit_breaker_max_cooldown',
+    CircuitBreakerHealthScoreThreshold: 'circuit_breaker_health_score_threshold',
+    CircuitBreakerHealthScoreMin: 'circuit_breaker_health_score_min',
+    CircuitBreakerHealthScoreMax: 'circuit_breaker_health_score_max',
+    CircuitBreakerHealthScoreDecayStep: 'circuit_breaker_health_score_decay_step',
+    CircuitBreakerHealthScoreDecayIntervalSeconds: 'circuit_breaker_health_score_decay_interval_seconds',
+    CircuitBreakerHealthScoreWarmupSuccesses: 'circuit_breaker_health_score_warmup_successes',
 } as const;
 
 /**
@@ -209,4 +215,3 @@ export function useImportDB() {
         },
     });
 }
-

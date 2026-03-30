@@ -1,126 +1,188 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Zap, Hash, Timer, TimerOff, HelpCircle } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import { Gauge, Hash, HelpCircle, Timer, TimerOff, Waves, Zap } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useSettingList, useSetSetting, SettingKey } from '@/api/endpoints/setting';
 import { toast } from '@/components/common/Toast';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/animate-ui/components/animate/tooltip';
+
+type FieldConfig = {
+    field: string;
+    labelKey: string;
+    placeholderKey: string;
+    icon: LucideIcon;
+};
+
+const basicFields: FieldConfig[] = [
+    {
+        field: SettingKey.CircuitBreakerThreshold,
+        labelKey: 'threshold.label',
+        placeholderKey: 'threshold.placeholder',
+        icon: Hash,
+    },
+    {
+        field: SettingKey.CircuitBreakerCooldown,
+        labelKey: 'cooldown.label',
+        placeholderKey: 'cooldown.placeholder',
+        icon: Timer,
+    },
+    {
+        field: SettingKey.CircuitBreakerMaxCooldown,
+        labelKey: 'maxCooldown.label',
+        placeholderKey: 'maxCooldown.placeholder',
+        icon: TimerOff,
+    },
+];
+
+const healthFields: FieldConfig[] = [
+    {
+        field: SettingKey.CircuitBreakerHealthScoreThreshold,
+        labelKey: 'healthScoreThreshold.label',
+        placeholderKey: 'healthScoreThreshold.placeholder',
+        icon: Gauge,
+    },
+    {
+        field: SettingKey.CircuitBreakerHealthScoreMin,
+        labelKey: 'healthScoreMin.label',
+        placeholderKey: 'healthScoreMin.placeholder',
+        icon: Gauge,
+    },
+    {
+        field: SettingKey.CircuitBreakerHealthScoreMax,
+        labelKey: 'healthScoreMax.label',
+        placeholderKey: 'healthScoreMax.placeholder',
+        icon: Gauge,
+    },
+    {
+        field: SettingKey.CircuitBreakerHealthScoreDecayStep,
+        labelKey: 'healthScoreDecayStep.label',
+        placeholderKey: 'healthScoreDecayStep.placeholder',
+        icon: Waves,
+    },
+    {
+        field: SettingKey.CircuitBreakerHealthScoreDecayIntervalSeconds,
+        labelKey: 'healthScoreDecayIntervalSeconds.label',
+        placeholderKey: 'healthScoreDecayIntervalSeconds.placeholder',
+        icon: Timer,
+    },
+    {
+        field: SettingKey.CircuitBreakerHealthScoreWarmupSuccesses,
+        labelKey: 'healthScoreWarmupSuccesses.label',
+        placeholderKey: 'healthScoreWarmupSuccesses.placeholder',
+        icon: Zap,
+    },
+];
+
+const allFields = [...basicFields, ...healthFields];
+
+function FieldGrid({
+    fields,
+    values,
+    onChange,
+    onBlur,
+    t,
+}: {
+    fields: FieldConfig[];
+    values: Record<string, string>;
+    onChange: (field: string, value: string) => void;
+    onBlur: (field: string) => void;
+    t: ReturnType<typeof useTranslations<'setting'>>;
+}) {
+    return (
+        <div className="grid gap-4 md:grid-cols-2">
+            {fields.map(({ field, labelKey, placeholderKey, icon: Icon }) => (
+                <label key={field} className="rounded-2xl border border-border/60 bg-background/70 p-4 space-y-3">
+                    <div className="flex items-center gap-3">
+                        <div className="flex size-9 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+                            <Icon className="h-4 w-4" />
+                        </div>
+                        <span className="text-sm font-medium leading-5">{t(`circuitBreaker.${labelKey}`)}</span>
+                    </div>
+                    <Input
+                        type="number"
+                        value={values[field] ?? ''}
+                        onChange={(e) => onChange(field, e.target.value)}
+                        onBlur={() => onBlur(field)}
+                        placeholder={t(`circuitBreaker.${placeholderKey}`)}
+                        className="rounded-xl"
+                    />
+                </label>
+            ))}
+        </div>
+    );
+}
 
 export function SettingCircuitBreaker() {
     const t = useTranslations('setting');
     const { data: settings } = useSettingList();
     const setSetting = useSetSetting();
 
-    const [threshold, setThreshold] = useState('');
-    const [cooldown, setCooldown] = useState('');
-    const [maxCooldown, setMaxCooldown] = useState('');
-
-    const initialThreshold = useRef('');
-    const initialCooldown = useRef('');
-    const initialMaxCooldown = useRef('');
+    const [values, setValues] = useState<Record<string, string>>({});
+    const initialValues = useRef<Record<string, string>>({});
+    const fields = useMemo(() => allFields, []);
 
     useEffect(() => {
-        if (settings) {
-            const th = settings.find(s => s.key === SettingKey.CircuitBreakerThreshold);
-            const cd = settings.find(s => s.key === SettingKey.CircuitBreakerCooldown);
-            const mcd = settings.find(s => s.key === SettingKey.CircuitBreakerMaxCooldown);
-            if (th) {
-                queueMicrotask(() => setThreshold(th.value));
-                initialThreshold.current = th.value;
-            }
-            if (cd) {
-                queueMicrotask(() => setCooldown(cd.value));
-                initialCooldown.current = cd.value;
-            }
-            if (mcd) {
-                queueMicrotask(() => setMaxCooldown(mcd.value));
-                initialMaxCooldown.current = mcd.value;
-            }
-        }
-    }, [settings]);
+        if (!settings) return;
 
-    const handleSave = (key: string, value: string, initialValue: string) => {
+        const nextValues: Record<string, string> = {};
+        for (const field of fields) {
+            const setting = settings.find((item) => item.key === field.field);
+            nextValues[field.field] = setting?.value ?? '';
+        }
+        initialValues.current = nextValues;
+        queueMicrotask(() => setValues(nextValues));
+    }, [fields, settings]);
+
+    const handleChange = (field: string, value: string) => {
+        setValues((prev) => ({ ...prev, [field]: value }));
+    };
+
+    const handleSave = (field: string) => {
+        const value = values[field] ?? '';
+        const initialValue = initialValues.current[field] ?? '';
         if (value === initialValue) return;
 
-        setSetting.mutate({ key, value }, {
-            onSuccess: () => {
-                toast.success(t('saved'));
-                if (key === SettingKey.CircuitBreakerThreshold) {
-                    initialThreshold.current = value;
-                } else if (key === SettingKey.CircuitBreakerCooldown) {
-                    initialCooldown.current = value;
-                } else if (key === SettingKey.CircuitBreakerMaxCooldown) {
-                    initialMaxCooldown.current = value;
-                }
-            }
-        });
+        setSetting.mutate(
+            { key: field, value },
+            {
+                onSuccess: () => {
+                    toast.success(t('saved'));
+                    initialValues.current = { ...initialValues.current, [field]: value };
+                },
+            },
+        );
     };
 
     return (
         <div className="rounded-3xl border border-border bg-card p-6 space-y-5">
-            <h2 className="text-lg font-bold text-card-foreground flex items-center gap-2">
+            <div className="flex items-center gap-2 text-lg font-bold text-card-foreground">
                 <Zap className="h-5 w-5" />
-                {t('circuitBreaker.title')}
+                <span>{t('circuitBreaker.title')}</span>
                 <TooltipProvider>
                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <HelpCircle className="size-4 text-muted-foreground cursor-help" />
+                            <HelpCircle className="size-4 cursor-help text-muted-foreground" />
                         </TooltipTrigger>
-                        <TooltipContent>
-                            {t('circuitBreaker.hint')}
-                        </TooltipContent>
+                        <TooltipContent>{t('circuitBreaker.hint')}</TooltipContent>
                     </Tooltip>
                 </TooltipProvider>
-            </h2>
-
-            {/* 熔断触发阈值 */}
-            <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                    <Hash className="h-5 w-5 text-muted-foreground" />
-                    <span className="text-sm font-medium">{t('circuitBreaker.threshold.label')}</span>
-                </div>
-                <Input
-                    type="number"
-                    value={threshold}
-                    onChange={(e) => setThreshold(e.target.value)}
-                    onBlur={() => handleSave(SettingKey.CircuitBreakerThreshold, threshold, initialThreshold.current)}
-                    placeholder={t('circuitBreaker.threshold.placeholder')}
-                    className="w-48 rounded-xl"
-                />
             </div>
 
-            {/* 基础冷却时间 */}
-            <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                    <Timer className="h-5 w-5 text-muted-foreground" />
-                    <span className="text-sm font-medium">{t('circuitBreaker.cooldown.label')}</span>
+            <div className="space-y-3">
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                    {t('circuitBreaker.sections.basic')}
                 </div>
-                <Input
-                    type="number"
-                    value={cooldown}
-                    onChange={(e) => setCooldown(e.target.value)}
-                    onBlur={() => handleSave(SettingKey.CircuitBreakerCooldown, cooldown, initialCooldown.current)}
-                    placeholder={t('circuitBreaker.cooldown.placeholder')}
-                    className="w-48 rounded-xl"
-                />
+                <FieldGrid fields={basicFields} values={values} onChange={handleChange} onBlur={handleSave} t={t} />
             </div>
 
-            {/* 最大冷却时间 */}
-            <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                    <TimerOff className="h-5 w-5 text-muted-foreground" />
-                    <span className="text-sm font-medium">{t('circuitBreaker.maxCooldown.label')}</span>
+            <div className="space-y-3">
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                    {t('circuitBreaker.sections.health')}
                 </div>
-                <Input
-                    type="number"
-                    value={maxCooldown}
-                    onChange={(e) => setMaxCooldown(e.target.value)}
-                    onBlur={() => handleSave(SettingKey.CircuitBreakerMaxCooldown, maxCooldown, initialMaxCooldown.current)}
-                    placeholder={t('circuitBreaker.maxCooldown.placeholder')}
-                    className="w-48 rounded-xl"
-                />
+                <FieldGrid fields={healthFields} values={values} onChange={handleChange} onBlur={handleSave} t={t} />
             </div>
         </div>
     );

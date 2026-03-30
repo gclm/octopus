@@ -170,6 +170,10 @@
         },
         "circuitBreaker": {
             "title": "熔斷器配置",
+            "sections": {
+                "basic": "基礎保護",
+                "health": "健康分治理"
+            },
             "threshold": {
                 "label": "熔斷觸發閾值（連續失敗次數）",
                 "placeholder": "請輸入閾值"
@@ -182,7 +186,31 @@
                 "label": "最大冷卻時間（秒）",
                 "placeholder": "請輸入最大冷卻時間"
             },
-            "hint": "當渠道連續失敗達到閾值後觸發熔斷，冷卻時間按指數退避增長，上限為最大冷卻時間"
+            "healthScoreThreshold": {
+                "label": "健康分長冷卻閾值",
+                "placeholder": "請輸入負向閾值，例如 -50"
+            },
+            "healthScoreMin": {
+                "label": "健康分下限",
+                "placeholder": "請輸入最小值"
+            },
+            "healthScoreMax": {
+                "label": "健康分上限",
+                "placeholder": "請輸入最大值"
+            },
+            "healthScoreDecayStep": {
+                "label": "健康分每次衰減步長",
+                "placeholder": "請輸入衰減步長"
+            },
+            "healthScoreDecayIntervalSeconds": {
+                "label": "健康分衰減週期（秒）",
+                "placeholder": "請輸入衰減週期"
+            },
+            "healthScoreWarmupSuccesses": {
+                "label": "觀察期成功樣本數",
+                "placeholder": "請輸入成功樣本數，0 表示關閉觀察期"
+            },
+            "hint": "基礎熔斷負責短時隔離；健康分負責長期降權。觀察期內的新渠道或新 key 會先以中性分參與，避免少量成功樣本過早搶佔流量。"
         },
         "saved": "已儲存",
         "backup": {
@@ -457,12 +485,52 @@
                 "disabled": "供應源已停用"
             }
         },
+        "health": {
+            "status": {
+                "idle": "無執行訊號",
+                "neutral": "中性",
+                "healthy": "健康",
+                "degraded": "降權中",
+                "cooling": "冷卻中",
+                "warming": "觀察期"
+            },
+            "labels": {
+                "status": "當前狀態",
+                "routingScore": "路由分",
+                "coolingRoutes": "冷卻路由",
+                "warmupRoutes": "觀察期路由",
+                "trackedRoutes": "已追蹤路由",
+                "trackedKeys": "已追蹤金鑰",
+                "worstRawScore": "最差原始分",
+                "cooldown": "剩餘冷卻",
+                "scoreShort": "分數"
+            },
+            "score": "分數",
+            "routes": "{count} 條路由",
+            "cooldown": "冷卻 {time}",
+            "warmup": "{count} 條觀察中",
+            "noSignals": "此供應源尚未累積執行期健康樣本",
+            "moreRoutes": "還有 {count} 條",
+            "failures": {
+                "unknown": "未知失敗",
+                "first_token_timeout": "首包超時",
+                "network_timeout": "網路超時",
+                "tls_error": "TLS 錯誤",
+                "auth_error": "驗證失敗",
+                "model_not_found": "模型不存在",
+                "upstream_5xx": "上游 5xx",
+                "protocol_error": "協定錯誤",
+                "network_error": "網路錯誤",
+                "client_error": "客戶端錯誤"
+            }
+        },
         "detail": {
             "title": {
                 "edit": "編輯供應源",
                 "view": "供應源詳情"
             },
             "sections": {
+                "health": "健康治理",
                 "requests": "請求詳情",
                 "tokens": "Token 使用",
                 "costs": "成本詳情",

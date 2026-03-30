@@ -57,3 +57,37 @@ func TestApplyHealthOrderPenalizesVeryBadHealthAcrossPriorities(t *testing.T) {
 		t.Fatalf("expected healthier candidate to overtake after penalty, got channel %d", candidates[0].ChannelID)
 	}
 }
+
+func TestApplyHealthOrderDoesNotPromoteWarmupCandidateTooEarly(t *testing.T) {
+	prepareCircuitTest(t)
+	globalBreaker = sync.Map{}
+	RecordSuccess(40, 1, "model-a", 500) // one fast success should still be in warmup
+
+	candidates := []model.GroupItem{
+		{ID: 1, ChannelID: 41, ModelName: "model-a", Priority: 1},
+		{ID: 2, ChannelID: 40, ModelName: "model-a", Priority: 1},
+	}
+
+	applyHealthOrder(candidates)
+	if candidates[0].ChannelID != 41 {
+		t.Fatalf("expected neutral candidate to remain first during warmup, got channel %d", candidates[0].ChannelID)
+	}
+}
+
+func TestApplyHealthOrderPromotesCandidateAfterWarmup(t *testing.T) {
+	prepareCircuitTest(t)
+	globalBreaker = sync.Map{}
+	for range 3 {
+		RecordSuccess(50, 1, "model-a", 500)
+	}
+
+	candidates := []model.GroupItem{
+		{ID: 1, ChannelID: 51, ModelName: "model-a", Priority: 1},
+		{ID: 2, ChannelID: 50, ModelName: "model-a", Priority: 1},
+	}
+
+	applyHealthOrder(candidates)
+	if candidates[0].ChannelID != 50 {
+		t.Fatalf("expected warmed candidate to be promoted, got channel %d", candidates[0].ChannelID)
+	}
+}

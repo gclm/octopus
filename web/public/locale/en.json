@@ -170,6 +170,10 @@
         },
         "circuitBreaker": {
             "title": "Circuit Breaker",
+            "sections": {
+                "basic": "Basic Protection",
+                "health": "Health Score"
+            },
             "threshold": {
                 "label": "Failure Threshold (consecutive failures)",
                 "placeholder": "Enter threshold"
@@ -182,7 +186,31 @@
                 "label": "Max Cooldown (seconds)",
                 "placeholder": "Enter max cooldown in seconds"
             },
-            "hint": "When a channel fails consecutively up to the threshold, circuit breaker trips. Cooldown grows exponentially up to the max cooldown"
+            "healthScoreThreshold": {
+                "label": "Health Score Long-Cooldown Threshold",
+                "placeholder": "Enter a negative threshold, for example -50"
+            },
+            "healthScoreMin": {
+                "label": "Health Score Minimum",
+                "placeholder": "Enter the minimum score"
+            },
+            "healthScoreMax": {
+                "label": "Health Score Maximum",
+                "placeholder": "Enter the maximum score"
+            },
+            "healthScoreDecayStep": {
+                "label": "Health Score Decay Step",
+                "placeholder": "Enter the decay step"
+            },
+            "healthScoreDecayIntervalSeconds": {
+                "label": "Health Score Decay Interval (seconds)",
+                "placeholder": "Enter the decay interval in seconds"
+            },
+            "healthScoreWarmupSuccesses": {
+                "label": "Warm-up Success Samples",
+                "placeholder": "Enter the sample count, 0 disables warm-up"
+            },
+            "hint": "Base circuit breaking isolates short failures. Health scores handle longer-term demotion. During warm-up, new channels or keys stay neutral until they collect enough successful samples."
         },
         "saved": "Saved",
         "backup": {
@@ -457,12 +485,52 @@
                 "disabled": "Channel disabled"
             }
         },
+        "health": {
+            "status": {
+                "idle": "No runtime signal",
+                "neutral": "Neutral",
+                "healthy": "Healthy",
+                "degraded": "Degraded",
+                "cooling": "Cooling",
+                "warming": "Warm-up"
+            },
+            "labels": {
+                "status": "Current Status",
+                "routingScore": "Routing Score",
+                "coolingRoutes": "Cooling Routes",
+                "warmupRoutes": "Warm-up Routes",
+                "trackedRoutes": "Tracked Routes",
+                "trackedKeys": "Tracked Keys",
+                "worstRawScore": "Worst Raw Score",
+                "cooldown": "Cooldown Left",
+                "scoreShort": "Score"
+            },
+            "score": "Score",
+            "routes": "{count} routes",
+            "cooldown": "Cooldown {time}",
+            "warmup": "{count} warming",
+            "noSignals": "This channel has no runtime health samples yet",
+            "moreRoutes": "{count} more",
+            "failures": {
+                "unknown": "Unknown failure",
+                "first_token_timeout": "First token timeout",
+                "network_timeout": "Network timeout",
+                "tls_error": "TLS error",
+                "auth_error": "Auth error",
+                "model_not_found": "Model not found",
+                "upstream_5xx": "Upstream 5xx",
+                "protocol_error": "Protocol error",
+                "network_error": "Network error",
+                "client_error": "Client error"
+            }
+        },
         "detail": {
             "title": {
                 "edit": "Edit Channel",
                 "view": "Channel Details"
             },
             "sections": {
+                "health": "Health Routing",
                 "requests": "Request Details",
                 "tokens": "Token Usage",
                 "costs": "Cost Details",
