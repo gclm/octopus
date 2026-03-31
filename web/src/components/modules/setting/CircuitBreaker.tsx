@@ -3,8 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { LucideIcon } from 'lucide-react';
-import { Compass, Gauge, Hash, HelpCircle, Timer, TimerOff, Waves, Zap } from 'lucide-react';
+import { Compass, Gauge, Hash, HelpCircle, KeyRound, Timer, TimerOff, Waves, Zap } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
 import { useSettingList, useSetSetting, SettingKey } from '@/api/endpoints/setting';
 import { toast } from '@/components/common/Toast';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/animate-ui/components/animate/tooltip';
@@ -13,6 +14,13 @@ type FieldConfig = {
     field: string;
     labelKey: string;
     placeholderKey: string;
+    icon: LucideIcon;
+};
+
+type ToggleConfig = {
+    field: string;
+    labelKey: string;
+    descriptionKey: string;
     icon: LucideIcon;
 };
 
@@ -82,6 +90,13 @@ const healthFields: FieldConfig[] = [
     },
 ];
 
+const keyExplorationToggle: ToggleConfig = {
+    field: SettingKey.CircuitBreakerKeyExplorationEnabled,
+    labelKey: 'keyExplorationEnabled.label',
+    descriptionKey: 'keyExplorationEnabled.description',
+    icon: KeyRound,
+};
+
 const allFields = [...basicFields, ...healthFields];
 
 function FieldGrid({
@@ -127,7 +142,9 @@ export function SettingCircuitBreaker() {
     const setSetting = useSetSetting();
 
     const [values, setValues] = useState<Record<string, string>>({});
+    const [keyExplorationEnabled, setKeyExplorationEnabled] = useState(true);
     const initialValues = useRef<Record<string, string>>({});
+    const initialKeyExplorationEnabled = useRef(true);
     const fields = useMemo(() => allFields, []);
 
     useEffect(() => {
@@ -138,8 +155,14 @@ export function SettingCircuitBreaker() {
             const setting = settings.find((item) => item.key === field.field);
             nextValues[field.field] = setting?.value ?? '';
         }
+        const keyExplorationSetting = settings.find((item) => item.key === keyExplorationToggle.field);
+        const nextKeyExplorationEnabled = keyExplorationSetting?.value !== 'false';
         initialValues.current = nextValues;
-        queueMicrotask(() => setValues(nextValues));
+        initialKeyExplorationEnabled.current = nextKeyExplorationEnabled;
+        queueMicrotask(() => {
+            setValues(nextValues);
+            setKeyExplorationEnabled(nextKeyExplorationEnabled);
+        });
     }, [fields, settings]);
 
     const handleChange = (field: string, value: string) => {
@@ -157,6 +180,21 @@ export function SettingCircuitBreaker() {
                 onSuccess: () => {
                     toast.success(t('saved'));
                     initialValues.current = { ...initialValues.current, [field]: value };
+                },
+            },
+        );
+    };
+    const handleKeyExplorationToggle = (checked: boolean) => {
+        setKeyExplorationEnabled(checked);
+        setSetting.mutate(
+            { key: keyExplorationToggle.field, value: checked ? 'true' : 'false' },
+            {
+                onSuccess: () => {
+                    toast.success(t('saved'));
+                    initialKeyExplorationEnabled.current = checked;
+                },
+                onError: () => {
+                    setKeyExplorationEnabled(initialKeyExplorationEnabled.current);
                 },
             },
         );
@@ -189,6 +227,19 @@ export function SettingCircuitBreaker() {
                     {t('circuitBreaker.sections.health')}
                 </div>
                 <FieldGrid fields={healthFields} values={values} onChange={handleChange} onBlur={handleSave} t={t} />
+            </div>
+
+            <div className="flex items-center justify-between gap-4 rounded-2xl border border-border/60 bg-background/70 p-4">
+                <div className="flex items-start gap-3">
+                    <div className="flex size-9 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+                        {(() => { const Icon = keyExplorationToggle.icon; return <Icon className="h-4 w-4" />; })()}
+                    </div>
+                    <div className="space-y-1">
+                        <div className="text-sm font-medium leading-5">{t(`circuitBreaker.${keyExplorationToggle.labelKey}`)}</div>
+                        <div className="text-xs leading-5 text-muted-foreground">{t(`circuitBreaker.${keyExplorationToggle.descriptionKey}`)}</div>
+                    </div>
+                </div>
+                <Switch checked={keyExplorationEnabled} onCheckedChange={handleKeyExplorationToggle} />
             </div>
         </div>
     );

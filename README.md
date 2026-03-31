@@ -265,7 +265,7 @@ Groups aggregate multiple channels into a unified external model name.
 
 > 💡 **Example**: Create a group named `gpt-4o`, add multiple providers' GPT-4o channels to it, then access all channels via a unified `model: gpt-4o`.
 
-> 🩺 **Health score note**: Health scores now default to penalizing unhealthy channels or keys instead of continuously rewarding already-successful routes. If session stickiness (`session_keep_time`) is enabled, sticky hits still take precedence over exploration. The low-frequency exploration interval is configurable, defaults to once every 6 requests, and applies to both channel-level and multi-key re-sampling within the same channel.
+> 🩺 **Health score note**: Health scores now default to penalizing unhealthy channels or keys instead of continuously rewarding already-successful routes. If session stickiness (`session_keep_time`) is enabled, sticky hits still take precedence over exploration. The low-frequency exploration interval is configurable, defaults to once every 6 requests, and multi-key re-sampling within the same channel can be toggled separately in settings.
 
 ---
 

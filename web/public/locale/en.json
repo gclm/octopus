@@ -214,7 +214,11 @@
                 "label": "Low-frequency Exploration Interval (every N requests)",
                 "placeholder": "Enter the interval, recommended 4-8, default 6"
             },
-            "hint": "Base circuit breaking isolates short failures. Health scores handle longer-term demotion. During warm-up, new channels or keys stay neutral until they collect enough successful samples. Low-frequency exploration uses the same interval to give long-idle healthy channels or healthy keys within the same channel an occasional re-sampling chance, without overriding sticky sessions."
+            "keyExplorationEnabled": {
+                "label": "Enable Multi-key Exploration",
+                "description": "When disabled, only channel-level low-frequency exploration remains and idle keys within the same channel will no longer be periodically re-sampled."
+            },
+            "hint": "Base circuit breaking isolates short failures. Health scores handle longer-term demotion. During warm-up, new channels or keys stay neutral until they collect enough successful samples. Low-frequency exploration uses the same interval to re-sample long-idle healthy channels; healthy keys within the same channel can be controlled separately with the toggle below, without overriding sticky sessions."
         },
         "saved": "Saved",
         "backup": {

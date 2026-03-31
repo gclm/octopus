@@ -25,7 +25,8 @@ const (
 	SettingKeyCircuitBreakerHealthScoreDecayStep            SettingKey = "circuit_breaker_health_score_decay_step"             // 每次衰减步长
 	SettingKeyCircuitBreakerHealthScoreDecayIntervalSeconds SettingKey = "circuit_breaker_health_score_decay_interval_seconds" // 健康分衰减周期（秒）
 	SettingKeyCircuitBreakerHealthScoreWarmupSuccesses      SettingKey = "circuit_breaker_health_score_warmup_successes"       // 正向健康分生效前所需的成功样本数
-	SettingKeyCircuitBreakerExplorationEvery                SettingKey = "circuit_breaker_exploration_every"                  // 低频探索间隔（每 N 次请求触发一次探索）
+	SettingKeyCircuitBreakerExplorationEvery                SettingKey = "circuit_breaker_exploration_every"                   // 低频探索间隔（每 N 次请求触发一次探索）
+	SettingKeyCircuitBreakerKeyExplorationEnabled           SettingKey = "circuit_breaker_key_exploration_enabled"             // 是否启用同渠道多 key 的低频探索
 )
 
 type Setting struct {
@@ -52,6 +53,7 @@ func DefaultSettings() []Setting {
 		{Key: SettingKeyCircuitBreakerHealthScoreDecayIntervalSeconds, Value: "600"},
 		{Key: SettingKeyCircuitBreakerHealthScoreWarmupSuccesses, Value: "3"},
 		{Key: SettingKeyCircuitBreakerExplorationEvery, Value: "6"},
+		{Key: SettingKeyCircuitBreakerKeyExplorationEnabled, Value: "true"},
 	}
 }
 
@@ -67,7 +69,7 @@ func (s *Setting) Validate() error {
 			return fmt.Errorf("model info update interval must be an integer")
 		}
 		return nil
-	case SettingKeyRelayLogKeepEnabled:
+	case SettingKeyRelayLogKeepEnabled, SettingKeyCircuitBreakerKeyExplorationEnabled:
 		if s.Value != "true" && s.Value != "false" {
 			return fmt.Errorf("relay log keep enabled must be true or false")
 		}

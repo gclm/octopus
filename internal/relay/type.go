@@ -71,6 +71,7 @@ type relayAttempt struct {
 	outAdapter           model.Outbound
 	channel              *dbmodel.Channel
 	usedKey              dbmodel.ChannelKey
+	keyExplorationKind   string
 	firstTokenTimeOutSec int
 }
 

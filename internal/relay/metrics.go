@@ -14,6 +14,29 @@ import (
 	"github.com/bestruirui/octopus/internal/utils/log"
 )
 
+type ExplorationSummary struct {
+	Total   int
+	Channel int
+	Key     int
+}
+
+func summarizeExploration(attempts []model.ChannelAttempt) ExplorationSummary {
+	summary := ExplorationSummary{}
+	for _, attempt := range attempts {
+		if attempt.Exploration == "" {
+			continue
+		}
+		summary.Total++
+		if strings.Contains(attempt.Exploration, "channel") {
+			summary.Channel++
+		}
+		if strings.Contains(attempt.Exploration, "key") {
+			summary.Key++
+		}
+	}
+	return summary
+}
+
 // RelayMetrics 负责最终的日志收集与持久化
 type RelayMetrics struct {
 	APIKeyID     int
@@ -99,6 +122,7 @@ func (m *RelayMetrics) Save(ctx context.Context, success bool, err error, attemp
 	}
 	lastAttemptDurationMs := 0
 	lastAttemptStatus := "none"
+	explorationSummary := summarizeExploration(attempts)
 	if len(attempts) > 0 {
 		lastAttemptDurationMs = attempts[len(attempts)-1].Duration
 		lastAttemptStatus = string(attempts[len(attempts)-1].Status)
@@ -110,11 +134,11 @@ func (m *RelayMetrics) Save(ctx context.Context, success bool, err error, attemp
 	op.StatsAPIKeyUpdate(m.APIKeyID, globalStats)
 	op.StatsChannelUpdate(channelID, globalStats)
 
-	log.Infof("relay complete: request_model=%s actual_model=%s channel=%d(%s) success=%t request_duration_ms=%d request_first_token_ms=%d last_attempt_duration_ms=%d last_attempt_status=%s input_token=%d output_token=%d input_cost=%f output_cost=%f total_cost=%f attempts=%d",
+	log.Infof("relay complete: request_model=%s actual_model=%s channel=%d(%s) success=%t request_duration_ms=%d request_first_token_ms=%d last_attempt_duration_ms=%d last_attempt_status=%s input_token=%d output_token=%d input_cost=%f output_cost=%f total_cost=%f attempts=%d exploration_total=%d channel_exploration_total=%d key_exploration_total=%d",
 		m.RequestModel, actualModelName(m.RequestModel, m.ActualModel), channelID, channelName, success, duration.Milliseconds(), firstTokenMs, lastAttemptDurationMs, lastAttemptStatus,
 		m.Stats.InputToken, m.Stats.OutputToken,
 		m.Stats.InputCost, m.Stats.OutputCost, m.Stats.InputCost+m.Stats.OutputCost,
-		len(attempts))
+		len(attempts), explorationSummary.Total, explorationSummary.Channel, explorationSummary.Key)
 
 	m.saveLog(ctx, err, duration, attempts, channelID, channelName)
 }

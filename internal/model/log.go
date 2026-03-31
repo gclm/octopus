@@ -20,6 +20,7 @@ type ChannelAttempt struct {
 	Status       AttemptStatus `json:"status"`
 	Duration     int           `json:"duration"`
 	Sticky       bool          `json:"sticky,omitempty"`
+	Exploration  string        `json:"exploration,omitempty"`
 	Msg          string        `json:"msg,omitempty"`
 }
 

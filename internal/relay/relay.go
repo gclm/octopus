@@ -103,7 +103,7 @@ func Handler(inboundType inbound.InboundType, c *gin.Context) {
 			continue
 		}
 
-		usedKey, keyAvailable := balancer.SelectChannelKey(channel, item.ModelName)
+		usedKey, keyAvailable, keyExploration := balancer.SelectChannelKey(channel, item.ModelName)
 		if usedKey.ChannelKey == "" {
 			iter.Skip(channel.ID, 0, channel.Name, "no available key")
 			continue
@@ -167,9 +167,9 @@ func Handler(inboundType inbound.InboundType, c *gin.Context) {
 			failureKind = balancer.FailureUnknown
 		}
 
-		log.Infof("request model %s, mode: %d, forwarding to channel: %s model: %s (attempt %d/%d, sticky=%t, priority=%d, effective_priority=%d, health=%d, last_failure_kind=%s, cooldown_remaining_ms=%d)",
+		log.Infof("request model %s, mode: %d, forwarding to channel: %s model: %s (attempt %d/%d, sticky=%t, priority=%d, effective_priority=%d, health=%d, last_failure_kind=%s, cooldown_remaining_ms=%d, channel_exploration=%t, key_exploration=%t)",
 			requestModel, group.Mode, channel.Name, item.ModelName,
-			iter.Index()+1, iter.Len(), iter.IsSticky(), item.Priority, effectivePriority, health, failureKind, cooldownRemaining.Milliseconds())
+			iter.Index()+1, iter.Len(), iter.IsSticky(), item.Priority, effectivePriority, health, failureKind, cooldownRemaining.Milliseconds(), iter.ExplorationKind() == "channel", keyExploration.Kind == "key")
 
 		// 构造尝试级上下文 -- 只写变化的 4 个字段
 		ra := &relayAttempt{
@@ -177,6 +177,7 @@ func Handler(inboundType inbound.InboundType, c *gin.Context) {
 			outAdapter:           outAdapter,
 			channel:              channel,
 			usedKey:              usedKey,
+			keyExplorationKind:   keyExploration.Kind,
 			firstTokenTimeOutSec: group.FirstTokenTimeOut,
 		}
 
@@ -199,7 +200,7 @@ func Handler(inboundType inbound.InboundType, c *gin.Context) {
 
 // attempt 统一管理一次通道尝试的完整生命周期
 func (ra *relayAttempt) attempt() attemptResult {
-	span := ra.iter.StartAttempt(ra.channel.ID, ra.usedKey.ID, ra.channel.Name)
+	span := ra.iter.StartAttempt(ra.channel.ID, ra.usedKey.ID, ra.channel.Name, ra.keyExplorationKind)
 
 	// 转发请求
 	statusCode, fwdErr := ra.forward()

@@ -15,9 +15,9 @@ type keyCandidate struct {
 
 // SelectChannelKey picks a channel key with routing health first and cost second.
 // The boolean reports whether the returned key can be used immediately.
-func SelectChannelKey(channel *model.Channel, modelName string) (model.ChannelKey, bool) {
+func SelectChannelKey(channel *model.Channel, modelName string) (model.ChannelKey, bool, ExplorationDecision) {
 	if channel == nil || len(channel.Keys) == 0 {
-		return model.ChannelKey{}, false
+		return model.ChannelKey{}, false, ExplorationDecision{}
 	}
 
 	nowSec := time.Now().Unix()
@@ -42,7 +42,7 @@ func SelectChannelKey(channel *model.Channel, modelName string) (model.ChannelKe
 	}
 
 	if len(candidates) == 0 {
-		return model.ChannelKey{}, false
+		return model.ChannelKey{}, false, ExplorationDecision{}
 	}
 
 	sort.SliceStable(candidates, func(i, j int) bool {
@@ -65,6 +65,6 @@ func SelectChannelKey(channel *model.Channel, modelName string) (model.ChannelKe
 		return left.key.ID < right.key.ID
 	})
 
-	maybePromoteKeyExploration(channel, modelName, candidates)
-	return candidates[0].key, !candidates[0].tripped
+	decision := maybePromoteKeyExploration(channel, modelName, candidates)
+	return candidates[0].key, !candidates[0].tripped, decision
 }

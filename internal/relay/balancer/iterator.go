@@ -17,9 +17,10 @@ type Iterator struct {
 	modelName  string // 请求模型名（用于熔断检查）
 
 	// 内嵌追踪
-	attempts []model.ChannelAttempt
-	count    int
-	active   *AttemptSpan
+	attempts    []model.ChannelAttempt
+	count       int
+	active      *AttemptSpan
+	exploration ExplorationDecision
 }
 
 // NewIterator 创建负载均衡迭代器
@@ -51,15 +52,17 @@ func NewIterator(group model.Group, apiKeyID int, requestModel string) *Iterator
 			}
 		}
 	}
+	exploration := ExplorationDecision{}
 	if stickyIdx < 0 {
-		maybePromoteExploration(group, candidates)
+		exploration = maybePromoteExploration(group, candidates)
 	}
 
 	return &Iterator{
-		candidates: candidates,
-		index:      -1,
-		stickyIdx:  stickyIdx,
-		modelName:  requestModel,
+		candidates:  candidates,
+		index:       -1,
+		stickyIdx:   stickyIdx,
+		modelName:   requestModel,
+		exploration: exploration,
 	}
 }
 
@@ -165,7 +168,7 @@ func (it *Iterator) SkipCircuitBreak(channelID, channelKeyID int, channelName st
 }
 
 // StartAttempt 开始一次真实转发尝试，返回 Span 用于记录结果
-func (it *Iterator) StartAttempt(channelID, channelKeyID int, channelName string) *AttemptSpan {
+func (it *Iterator) StartAttempt(channelID, channelKeyID int, channelName string, keyExploration string) *AttemptSpan {
 	RecordRouteAttempt(channelID, it.candidates[it.index].ModelName)
 	RecordKeyAttempt(channelID, channelKeyID, it.candidates[it.index].ModelName)
 	it.count++
@@ -177,6 +180,7 @@ func (it *Iterator) StartAttempt(channelID, channelKeyID int, channelName string
 			ModelName:    it.candidates[it.index].ModelName,
 			AttemptNum:   it.count,
 			Sticky:       it.IsSticky(),
+			Exploration:  mergeExplorationKinds(it.exploration.Kind, keyExploration),
 		},
 		startTime: time.Now(),
 		iter:      it,
@@ -237,4 +241,31 @@ func (s *AttemptSpan) FirstTokenDuration() time.Duration {
 // Duration 返回从开始到现在的耗时
 func (s *AttemptSpan) Duration() time.Duration {
 	return time.Since(s.startTime)
+}
+
+func (it *Iterator) ExplorationKind() string {
+	return it.exploration.Kind
+}
+
+func mergeExplorationKinds(parts ...string) string {
+	seen := map[string]bool{}
+	ordered := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if part == "" || seen[part] {
+			continue
+		}
+		seen[part] = true
+		ordered = append(ordered, part)
+	}
+	return joinExplorationKinds(ordered)
+}
+
+func joinExplorationKinds(parts []string) string {
+	if len(parts) == 0 {
+		return ""
+	}
+	if len(parts) == 1 {
+		return parts[0]
+	}
+	return parts[0] + "," + parts[1]
 }

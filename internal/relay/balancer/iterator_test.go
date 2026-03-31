@@ -155,6 +155,12 @@ func TestNewIteratorFailoverExploresWithinSamePriority(t *testing.T) {
 	if !iter.Next() || iter.Item().ChannelID != 102 {
 		t.Fatalf("expected same-priority exploration candidate first, got %+v", iter.Item())
 	}
+	span := iter.StartAttempt(102, 1002, "ch-102", "")
+	span.End(model.AttemptSuccess, 200, "")
+	attempts := iter.Attempts()
+	if len(attempts) == 0 || attempts[len(attempts)-1].Exploration != "channel" {
+		t.Fatalf("expected channel exploration mark on attempt, got %+v", attempts)
+	}
 }
 
 func TestNewIteratorDoesNotExploreRoundRobinGroups(t *testing.T) {

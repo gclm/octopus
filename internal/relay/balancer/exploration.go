@@ -13,11 +13,12 @@ import (
 const defaultExplorationEvery = 6
 
 var (
-	explorationCounters      sync.Map // key: groupID -> *atomic.Uint64
-	routeAttemptActivity     sync.Map // key: channelID:modelName -> time.Time
-	keyAttemptActivity       sync.Map // key: channelID:keyID:modelName -> time.Time
-	explorationEveryOverride int
-	explorationNowFunc       = time.Now
+	explorationCounters       sync.Map // key: groupID -> *atomic.Uint64
+	routeAttemptActivity      sync.Map // key: channelID:modelName -> time.Time
+	keyAttemptActivity        sync.Map // key: channelID:keyID:modelName -> time.Time
+	explorationEveryOverride  int
+	keyExplorationEnabledTest *bool
+	explorationNowFunc        = time.Now
 )
 
 func explorationEvery() int {
@@ -88,9 +89,9 @@ func shouldExplore(group model.Group, candidates []model.GroupItem) bool {
 	return v.(*atomic.Uint64).Add(1)%uint64(every) == 0
 }
 
-func maybePromoteExploration(group model.Group, candidates []model.GroupItem) bool {
+func maybePromoteExploration(group model.Group, candidates []model.GroupItem) ExplorationDecision {
 	if !shouldExplore(group, candidates) {
-		return false
+		return ExplorationDecision{}
 	}
 
 	basePriority := candidates[0].Priority
@@ -114,13 +115,13 @@ func maybePromoteExploration(group model.Group, candidates []model.GroupItem) bo
 	}
 
 	if bestIdx <= 0 {
-		return false
+		return ExplorationDecision{}
 	}
 
 	promoted := candidates[bestIdx]
 	copy(candidates[1:bestIdx+1], candidates[:bestIdx])
 	candidates[0] = promoted
-	return true
+	return ExplorationDecision{Kind: "channel", CandidateID: promoted.ChannelID}
 }
 
 func resetExplorationStateForTest() {
@@ -128,29 +129,49 @@ func resetExplorationStateForTest() {
 	routeAttemptActivity = sync.Map{}
 	keyAttemptActivity = sync.Map{}
 	explorationEveryOverride = 0
+	keyExplorationEnabledTest = nil
 	explorationNowFunc = time.Now
 }
 
+func keyExplorationEnabled() bool {
+	if keyExplorationEnabledTest != nil {
+		return *keyExplorationEnabledTest
+	}
+	v, err := op.SettingGetBool(model.SettingKeyCircuitBreakerKeyExplorationEnabled)
+	if err != nil {
+		return true
+	}
+	return v
+}
 
 func shouldExploreKeys(channel *model.Channel) bool {
 	if channel == nil || len(channel.Keys) < 2 {
 		return false
 	}
-	return true
+	return keyExplorationEnabled()
 }
 
-func maybePromoteKeyExploration(channel *model.Channel, modelName string, candidates []keyCandidate) bool {
+type ExplorationDecision struct {
+	Kind        string
+	CandidateID int
+}
+
+func (d ExplorationDecision) Active() bool {
+	return d.Kind != ""
+}
+
+func maybePromoteKeyExploration(channel *model.Channel, modelName string, candidates []keyCandidate) ExplorationDecision {
 	if !shouldExploreKeys(channel) {
-		return false
+		return ExplorationDecision{}
 	}
 	if len(candidates) == 0 || candidates[0].tripped || healthPenalty(candidates[0].score) > 0 {
-		return false
+		return ExplorationDecision{}
 	}
 	every := explorationEvery()
 	if every > 1 {
 		v, _ := explorationCounters.LoadOrStore(fmt.Sprintf("key:%d:%s", channel.ID, modelName), &atomic.Uint64{})
 		if v.(*atomic.Uint64).Add(1)%uint64(every) != 0 {
-			return false
+			return ExplorationDecision{}
 		}
 	}
 
@@ -168,10 +189,10 @@ func maybePromoteKeyExploration(channel *model.Channel, modelName string, candid
 		}
 	}
 	if bestIdx <= 0 {
-		return false
+		return ExplorationDecision{}
 	}
 	promoted := candidates[bestIdx]
 	copy(candidates[1:bestIdx+1], candidates[:bestIdx])
 	candidates[0] = promoted
-	return true
+	return ExplorationDecision{Kind: "key", CandidateID: promoted.key.ID}
 }

@@ -25,7 +25,7 @@ func TestSelectChannelKeyPrefersHealthBeforeCost(t *testing.T) {
 		RecordSuccess(60, 2, "model-a", 500*time.Millisecond)
 	}
 
-	selected, hasAvailable := SelectChannelKey(&channel, "model-a")
+	selected, hasAvailable, _ := SelectChannelKey(&channel, "model-a")
 	if !hasAvailable {
 		t.Fatal("expected available key")
 	}
@@ -47,7 +47,7 @@ func TestSelectChannelKeySkipsTrippedKeyWhenAnotherIsAvailable(t *testing.T) {
 	}
 
 	RecordFailure(61, 1, "model-a", FailureTLSError)
-	selected, hasAvailable := SelectChannelKey(&channel, "model-a")
+	selected, hasAvailable, _ := SelectChannelKey(&channel, "model-a")
 	if !hasAvailable {
 		t.Fatal("expected available key")
 	}
@@ -71,7 +71,7 @@ func TestSelectChannelKeyReturnsBestTrippedKeyWhenAllKeysBlocked(t *testing.T) {
 	RecordFailure(62, 1, "model-a", FailureTLSError)
 	RecordFailure(62, 2, "model-a", FailureAuthError)
 
-	selected, hasAvailable := SelectChannelKey(&channel, "model-a")
+	selected, hasAvailable, _ := SelectChannelKey(&channel, "model-a")
 	if hasAvailable {
 		t.Fatal("expected no immediately available key")
 	}
@@ -104,12 +104,52 @@ func TestSelectChannelKeyExploresStaleHealthyPeer(t *testing.T) {
 	now = now.Add(30 * time.Minute)
 	RecordKeyAttempt(63, 1, "model-a")
 
-	selected, hasAvailable := SelectChannelKey(&channel, "model-a")
+	selected, hasAvailable, decision := SelectChannelKey(&channel, "model-a")
 	if !hasAvailable {
 		t.Fatal("expected available key")
 	}
 	if selected.ID != 2 {
 		t.Fatalf("expected stale healthy peer to be explored, got %d", selected.ID)
 	}
+	if decision.Kind != "key" {
+		t.Fatalf("expected key exploration decision, got %+v", decision)
+	}
 }
 
+func TestSelectChannelKeyDoesNotExploreWhenKeyExplorationDisabled(t *testing.T) {
+	prepareCircuitTest(t)
+	explorationEveryOverride = 1
+	disabled := false
+	keyExplorationEnabledTest = &disabled
+	now := time.Unix(1_700_000_000, 0)
+	explorationNowFunc = func() time.Time { return now }
+	globalBreaker = sync.Map{}
+
+	channel := model.Channel{
+		ID: 64,
+		Keys: []model.ChannelKey{
+			{ID: 1, ChannelID: 64, Enabled: true, ChannelKey: "hot", TotalCost: 1},
+			{ID: 2, ChannelID: 64, Enabled: true, ChannelKey: "stale", TotalCost: 9},
+		},
+	}
+
+	for range 3 {
+		RecordSuccess(64, 1, "model-a", 500*time.Millisecond)
+		RecordSuccess(64, 2, "model-a", 500*time.Millisecond)
+	}
+
+	RecordKeyAttempt(64, 1, "model-a")
+	now = now.Add(30 * time.Minute)
+	RecordKeyAttempt(64, 1, "model-a")
+
+	selected, hasAvailable, decision := SelectChannelKey(&channel, "model-a")
+	if !hasAvailable {
+		t.Fatal("expected available key")
+	}
+	if selected.ID != 1 {
+		t.Fatalf("expected hot key to remain first when key exploration disabled, got %d", selected.ID)
+	}
+	if decision.Kind != "" {
+		t.Fatalf("expected no key exploration decision, got %+v", decision)
+	}
+}
