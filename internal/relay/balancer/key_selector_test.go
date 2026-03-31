@@ -79,3 +79,37 @@ func TestSelectChannelKeyReturnsBestTrippedKeyWhenAllKeysBlocked(t *testing.T) {
 		t.Fatal("expected best blocked key for circuit-break logging")
 	}
 }
+
+func TestSelectChannelKeyExploresStaleHealthyPeer(t *testing.T) {
+	prepareCircuitTest(t)
+	explorationEveryOverride = 1
+	now := time.Unix(1_700_000_000, 0)
+	explorationNowFunc = func() time.Time { return now }
+	globalBreaker = sync.Map{}
+
+	channel := model.Channel{
+		ID: 63,
+		Keys: []model.ChannelKey{
+			{ID: 1, ChannelID: 63, Enabled: true, ChannelKey: "hot", TotalCost: 1},
+			{ID: 2, ChannelID: 63, Enabled: true, ChannelKey: "stale", TotalCost: 9},
+		},
+	}
+
+	for range 3 {
+		RecordSuccess(63, 1, "model-a", 500*time.Millisecond)
+		RecordSuccess(63, 2, "model-a", 500*time.Millisecond)
+	}
+
+	RecordKeyAttempt(63, 1, "model-a")
+	now = now.Add(30 * time.Minute)
+	RecordKeyAttempt(63, 1, "model-a")
+
+	selected, hasAvailable := SelectChannelKey(&channel, "model-a")
+	if !hasAvailable {
+		t.Fatal("expected available key")
+	}
+	if selected.ID != 2 {
+		t.Fatalf("expected stale healthy peer to be explored, got %d", selected.ID)
+	}
+}
+

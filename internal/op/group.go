@@ -3,6 +3,7 @@ package op
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	"github.com/bestruirui/octopus/internal/db"
 	"github.com/bestruirui/octopus/internal/model"
@@ -361,6 +362,12 @@ func groupRefreshCache(ctx context.Context) error {
 		return err
 	}
 	for _, group := range groups {
+		sort.SliceStable(group.Items, func(i, j int) bool {
+			if group.Items[i].Priority != group.Items[j].Priority {
+				return group.Items[i].Priority < group.Items[j].Priority
+			}
+			return group.Items[i].ID < group.Items[j].ID
+		})
 		groupCache.Set(group.ID, group)
 		groupMap.Set(group.Name, group)
 	}
@@ -374,6 +381,12 @@ func groupRefreshCacheByID(id int, ctx context.Context) error {
 		First(&group, id).Error; err != nil {
 		return err
 	}
+	sort.SliceStable(group.Items, func(i, j int) bool {
+		if group.Items[i].Priority != group.Items[j].Priority {
+			return group.Items[i].Priority < group.Items[j].Priority
+		}
+		return group.Items[i].ID < group.Items[j].ID
+	})
 	groupCache.Set(group.ID, group)
 	groupMap.Set(group.Name, group)
 	return nil
@@ -391,6 +404,12 @@ func groupRefreshCacheByIDs(ids []int, ctx context.Context) error {
 		return err
 	}
 	for _, group := range groups {
+		sort.SliceStable(group.Items, func(i, j int) bool {
+			if group.Items[i].Priority != group.Items[j].Priority {
+				return group.Items[i].Priority < group.Items[j].Priority
+			}
+			return group.Items[i].ID < group.Items[j].ID
+		})
 		groupCache.Set(group.ID, group)
 		groupMap.Set(group.Name, group)
 	}

@@ -28,6 +28,7 @@ export const SettingKey = {
     CircuitBreakerHealthScoreDecayStep: 'circuit_breaker_health_score_decay_step',
     CircuitBreakerHealthScoreDecayIntervalSeconds: 'circuit_breaker_health_score_decay_interval_seconds',
     CircuitBreakerHealthScoreWarmupSuccesses: 'circuit_breaker_health_score_warmup_successes',
+    CircuitBreakerExplorationEvery: 'circuit_breaker_exploration_every',
 } as const;
 
 /**

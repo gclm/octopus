@@ -15,6 +15,8 @@ func prepareCircuitTest(t *testing.T) {
 	t.Helper()
 	globalBreaker = sync.Map{}
 	globalSession = sync.Map{}
+	resetExplorationStateForTest()
+	resetRoundRobinCountersForTest()
 	testSettingIntOverride = func(key model.SettingKey) (int, bool) {
 		switch key {
 		case model.SettingKeyCircuitBreakerThreshold:
@@ -42,6 +44,8 @@ func prepareCircuitTest(t *testing.T) {
 	t.Cleanup(func() {
 		globalBreaker = sync.Map{}
 		globalSession = sync.Map{}
+		resetExplorationStateForTest()
+		resetRoundRobinCountersForTest()
 		testSettingIntOverride = nil
 	})
 }

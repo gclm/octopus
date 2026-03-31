@@ -51,6 +51,11 @@ func SelectChannelKey(channel *model.Channel, modelName string) (model.ChannelKe
 		if left.tripped != right.tripped {
 			return !left.tripped
 		}
+		leftPenalty := healthPenalty(left.score)
+		rightPenalty := healthPenalty(right.score)
+		if leftPenalty != rightPenalty {
+			return leftPenalty < rightPenalty
+		}
 		if left.score != right.score {
 			return left.score > right.score
 		}
@@ -60,5 +65,6 @@ func SelectChannelKey(channel *model.Channel, modelName string) (model.ChannelKe
 		return left.key.ID < right.key.ID
 	})
 
+	maybePromoteKeyExploration(channel, modelName, candidates)
 	return candidates[0].key, !candidates[0].tripped
 }

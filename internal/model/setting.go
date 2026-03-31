@@ -25,6 +25,7 @@ const (
 	SettingKeyCircuitBreakerHealthScoreDecayStep            SettingKey = "circuit_breaker_health_score_decay_step"             // 每次衰减步长
 	SettingKeyCircuitBreakerHealthScoreDecayIntervalSeconds SettingKey = "circuit_breaker_health_score_decay_interval_seconds" // 健康分衰减周期（秒）
 	SettingKeyCircuitBreakerHealthScoreWarmupSuccesses      SettingKey = "circuit_breaker_health_score_warmup_successes"       // 正向健康分生效前所需的成功样本数
+	SettingKeyCircuitBreakerExplorationEvery                SettingKey = "circuit_breaker_exploration_every"                  // 低频探索间隔（每 N 次请求触发一次探索）
 )
 
 type Setting struct {
@@ -50,6 +51,7 @@ func DefaultSettings() []Setting {
 		{Key: SettingKeyCircuitBreakerHealthScoreDecayStep, Value: "5"},
 		{Key: SettingKeyCircuitBreakerHealthScoreDecayIntervalSeconds, Value: "600"},
 		{Key: SettingKeyCircuitBreakerHealthScoreWarmupSuccesses, Value: "3"},
+		{Key: SettingKeyCircuitBreakerExplorationEvery, Value: "6"},
 	}
 }
 
@@ -59,7 +61,7 @@ func (s *Setting) Validate() error {
 		SettingKeyCircuitBreakerThreshold, SettingKeyCircuitBreakerCooldown, SettingKeyCircuitBreakerMaxCooldown,
 		SettingKeyCircuitBreakerHealthScoreThreshold, SettingKeyCircuitBreakerHealthScoreMin, SettingKeyCircuitBreakerHealthScoreMax,
 		SettingKeyCircuitBreakerHealthScoreDecayStep, SettingKeyCircuitBreakerHealthScoreDecayIntervalSeconds,
-		SettingKeyCircuitBreakerHealthScoreWarmupSuccesses:
+		SettingKeyCircuitBreakerHealthScoreWarmupSuccesses, SettingKeyCircuitBreakerExplorationEvery:
 		_, err := strconv.Atoi(s.Value)
 		if err != nil {
 			return fmt.Errorf("model info update interval must be an integer")

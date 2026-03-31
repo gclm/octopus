@@ -210,7 +210,11 @@
                 "label": "Warm-up Success Samples",
                 "placeholder": "Enter the sample count, 0 disables warm-up"
             },
-            "hint": "Base circuit breaking isolates short failures. Health scores handle longer-term demotion. During warm-up, new channels or keys stay neutral until they collect enough successful samples."
+            "explorationEvery": {
+                "label": "Low-frequency Exploration Interval (every N requests)",
+                "placeholder": "Enter the interval, recommended 4-8, default 6"
+            },
+            "hint": "Base circuit breaking isolates short failures. Health scores handle longer-term demotion. During warm-up, new channels or keys stay neutral until they collect enough successful samples. Low-frequency exploration uses the same interval to give long-idle healthy channels or healthy keys within the same channel an occasional re-sampling chance, without overriding sticky sessions."
         },
         "saved": "Saved",
         "backup": {

@@ -3,12 +3,56 @@ package balancer
 import (
 	"math/rand"
 	"sort"
+	"strconv"
+	"sync"
 	"sync/atomic"
 
 	"github.com/bestruirui/octopus/internal/model"
 )
 
-var roundRobinCounter uint64
+var roundRobinCounters sync.Map // key: scope -> *atomic.Uint64
+
+func nextRoundRobinStart(scope string, n int) int {
+	if n == 0 {
+		return 0
+	}
+	if scope == "" {
+		scope = "default"
+	}
+	v, _ := roundRobinCounters.LoadOrStore(scope, &atomic.Uint64{})
+	return int(v.(*atomic.Uint64).Add(1) % uint64(n))
+}
+
+func roundRobinCandidates(scope string, items []model.GroupItem) []model.GroupItem {
+	n := len(items)
+	if n == 0 {
+		return nil
+	}
+	idx := nextRoundRobinStart(scope, n)
+	result := make([]model.GroupItem, n)
+	for i := 0; i < n; i++ {
+		result[i] = items[(idx+i)%n]
+	}
+	return result
+	}
+
+func roundRobinScopeForGroup(groupID int) string {
+	return "group:" + strconv.Itoa(groupID)
+}
+
+func healthPenalty(score int) int {
+	switch {
+	case score <= -80:
+		return 3
+	case score <= -50:
+		return 2
+	case score <= -20:
+		return 1
+	default:
+		return 0
+	}
+}
+
 // Balancer 根据负载均衡模式选择通道
 type Balancer interface {
 	// Candidates 返回按策略排序的候选列表
@@ -36,16 +80,7 @@ func GetBalancer(mode model.GroupMode) Balancer {
 type RoundRobin struct{}
 
 func (b *RoundRobin) Candidates(items []model.GroupItem) []model.GroupItem {
-	n := len(items)
-	if n == 0 {
-		return nil
-	}
-	idx := int(atomic.AddUint64(&roundRobinCounter, 1) % uint64(n))
-	result := make([]model.GroupItem, n)
-	for i := 0; i < n; i++ {
-		result[i] = items[(idx+i)%n]
-	}
-	return result
+	return roundRobinCandidates("default", items)
 }
 
 // Random 随机：随机打乱所有 items
@@ -146,8 +181,12 @@ func (b *Weighted) Candidates(items []model.GroupItem) []model.GroupItem {
 func sortByPriority(items []model.GroupItem) []model.GroupItem {
 	sorted := make([]model.GroupItem, len(items))
 	copy(sorted, items)
-	sort.Slice(sorted, func(i, j int) bool {
+	sort.SliceStable(sorted, func(i, j int) bool {
 		return sorted[i].Priority < sorted[j].Priority
 	})
 	return sorted
+}
+
+func resetRoundRobinCountersForTest() {
+	roundRobinCounters = sync.Map{}
 }

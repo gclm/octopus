@@ -25,8 +25,12 @@ type Iterator struct {
 // NewIterator 创建负载均衡迭代器
 // 自动处理：策略排序 + 粘性通道提前
 func NewIterator(group model.Group, apiKeyID int, requestModel string) *Iterator {
-	b := GetBalancer(group.Mode)
-	candidates := b.Candidates(group.Items)
+	var candidates []model.GroupItem
+	if group.Mode == model.GroupModeRoundRobin {
+		candidates = roundRobinCandidates(roundRobinScopeForGroup(group.ID), group.Items)
+	} else {
+		candidates = GetBalancer(group.Mode).Candidates(group.Items)
+	}
 	applyHealthOrder(candidates)
 
 	stickyIdx := -1
@@ -47,6 +51,9 @@ func NewIterator(group model.Group, apiKeyID int, requestModel string) *Iterator
 			}
 		}
 	}
+	if stickyIdx < 0 {
+		maybePromoteExploration(group, candidates)
+	}
 
 	return &Iterator{
 		candidates: candidates,
@@ -57,7 +64,8 @@ func NewIterator(group model.Group, apiKeyID int, requestModel string) *Iterator
 }
 
 func applyHealthOrder(candidates []model.GroupItem) {
-	// 惩罚型全局排序：保留优先级语义，但允许极差健康分在全局范围内适度后移。
+	// 健康分只负责降级明确不健康的候选，不再奖励成功样本更多的候选。
+	// 当存在惩罚时，仅在同惩罚组内按健康分做局部排序；完全健康时保持基础顺序。
 	sort.SliceStable(candidates, func(i, j int) bool {
 		left := candidates[i]
 		right := candidates[j]
@@ -68,24 +76,19 @@ func applyHealthOrder(candidates []model.GroupItem) {
 		if leftRank != rightRank {
 			return leftRank < rightRank
 		}
-		if leftScore == rightScore {
-			return left.ID < right.ID
+		leftPenalty := healthPenalty(leftScore)
+		rightPenalty := healthPenalty(rightScore)
+		if leftPenalty > 0 || rightPenalty > 0 {
+			if leftScore != rightScore {
+				return leftScore > rightScore
+			}
 		}
-		return leftScore > rightScore
+		return false
 	})
 }
 
 func effectivePriority(priority, score int) int {
-	penalty := 0
-	switch {
-	case score <= -80:
-		penalty = 3
-	case score <= -50:
-		penalty = 2
-	case score <= -20:
-		penalty = 1
-	}
-	return priority + penalty
+	return priority + healthPenalty(score)
 }
 
 func EffectivePriorityFor(channelID, keyID int, item model.GroupItem) int {
@@ -163,6 +166,8 @@ func (it *Iterator) SkipCircuitBreak(channelID, channelKeyID int, channelName st
 
 // StartAttempt 开始一次真实转发尝试，返回 Span 用于记录结果
 func (it *Iterator) StartAttempt(channelID, channelKeyID int, channelName string) *AttemptSpan {
+	RecordRouteAttempt(channelID, it.candidates[it.index].ModelName)
+	RecordKeyAttempt(channelID, channelKeyID, it.candidates[it.index].ModelName)
 	it.count++
 	span := &AttemptSpan{
 		attempt: model.ChannelAttempt{

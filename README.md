@@ -258,12 +258,14 @@ Groups aggregate multiple channels into a unified external model name.
 
 | Mode | Description |
 |------|-------------|
-| 🔄 **Round Robin** | Cycles through channels sequentially for each request |
-| 🎲 **Random** | Randomly selects an available channel for each request |
-| 🛡️ **Failover** | Prioritizes high-priority channels, switches to lower priority only on failure |
-| ⚖️ **Weighted** | Distributes requests based on configured channel weights |
+| 🔄 **Round Robin** | Rotates channels independently per group; health scores only demote clearly unhealthy routes and no longer let one successful channel dominate indefinitely |
+| 🎲 **Random** | Randomly selects an available channel; health scores only push unhealthy routes back, preserving the random-first behavior |
+| 🛡️ **Failover** | Prioritizes high-priority channels and only moves down when a route fails or becomes unhealthy; healthy same-priority backup channels or keys receive low-frequency exploration |
+| ⚖️ **Weighted** | Ranks channels by configured weight and recent success signals, while also giving long-idle healthy channels or keys low-frequency exploration so they keep receiving fresh samples |
 
 > 💡 **Example**: Create a group named `gpt-4o`, add multiple providers' GPT-4o channels to it, then access all channels via a unified `model: gpt-4o`.
+
+> 🩺 **Health score note**: Health scores now default to penalizing unhealthy channels or keys instead of continuously rewarding already-successful routes. If session stickiness (`session_keep_time`) is enabled, sticky hits still take precedence over exploration. The low-frequency exploration interval is configurable, defaults to once every 6 requests, and applies to both channel-level and multi-key re-sampling within the same channel.
 
 ---
 

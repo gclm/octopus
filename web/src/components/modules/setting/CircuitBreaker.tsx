@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { LucideIcon } from 'lucide-react';
-import { Gauge, Hash, HelpCircle, Timer, TimerOff, Waves, Zap } from 'lucide-react';
+import { Compass, Gauge, Hash, HelpCircle, Timer, TimerOff, Waves, Zap } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useSettingList, useSetSetting, SettingKey } from '@/api/endpoints/setting';
 import { toast } from '@/components/common/Toast';
@@ -73,6 +73,12 @@ const healthFields: FieldConfig[] = [
         labelKey: 'healthScoreWarmupSuccesses.label',
         placeholderKey: 'healthScoreWarmupSuccesses.placeholder',
         icon: Zap,
+    },
+    {
+        field: SettingKey.CircuitBreakerExplorationEvery,
+        labelKey: 'explorationEvery.label',
+        placeholderKey: 'explorationEvery.placeholder',
+        icon: Compass,
     },
 ];
 

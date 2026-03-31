@@ -151,3 +151,51 @@ func TestWeightedCandidates_StableTopOrderWithoutDiversifyRotation(t *testing.T)
 		}
 	}
 }
+
+func TestWeightedIteratorExploresStaleHealthyCandidate(t *testing.T) {
+	prepareCircuitTest(t)
+	explorationEveryOverride = 1
+	base := time.Unix(240*60, 0).UTC()
+	smartNowFunc = func() time.Time { return base }
+	explorationNowFunc = func() time.Time { return base }
+	t.Cleanup(func() { smartNowFunc = time.Now })
+
+	for _, ch := range []int{1, 2} {
+		for i := 0; i < 30; i++ {
+			recordSmartOutcome(ch, "m", true)
+		}
+	}
+
+	RecordRouteAttempt(1, "m")
+	base = base.Add(30 * time.Minute)
+	RecordRouteAttempt(2, "m")
+
+	group := model.Group{
+		ID:   88,
+		Mode: model.GroupModeWeighted,
+		Items: []model.GroupItem{
+			{ID: 1, ChannelID: 1, ModelName: "m", Weight: 80, Priority: 1},
+			{ID: 2, ChannelID: 2, ModelName: "m", Weight: 20, Priority: 1},
+		},
+	}
+
+	iter := NewIterator(group, 0, "m")
+	if !iter.Next() || iter.Item().ChannelID != 2 {
+		t.Fatalf("expected stalest healthy candidate to be explored first, got %+v", iter.Item())
+	}
+}
+
+func TestExplorationEveryFallsBackToDefault(t *testing.T) {
+	prepareCircuitTest(t)
+	if got := explorationEvery(); got != defaultExplorationEvery {
+		t.Fatalf("expected default exploration value %d, got %d", defaultExplorationEvery, got)
+	}
+}
+
+func TestExplorationEveryPrefersExplicitOverride(t *testing.T) {
+	prepareCircuitTest(t)
+	explorationEveryOverride = 6
+	if got := explorationEvery(); got != 6 {
+		t.Fatalf("expected exploration override value 6, got %d", got)
+	}
+}
