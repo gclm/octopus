@@ -221,6 +221,14 @@ build_frontend() {
     fi
     log_success "Frontend dependencies installed"
 
+    log_info "Checking locale message shapes..."
+    if ! pnpm run check:locale; then
+        log_error "Locale message shape check failed"
+        cd ..
+        return 1
+    fi
+    log_success "Locale message shapes verified"
+
     # Build the project
     log_info "Building frontend project..."
     if ! NEXT_PUBLIC_APP_VERSION="$GIT_VERSION" pnpm run build; then
