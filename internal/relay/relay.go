@@ -36,15 +36,15 @@ func Handler(inboundType inbound.InboundType, c *gin.Context) {
 		return
 	}
 	requestModel := internalRequest.Model
-	group, routingModel, err := resolveRoutingGroup(requestModel, internalRequest.ReasoningEffort, c.Request.Context())
-	if err != nil {
-		resp.Error(c, http.StatusNotFound, "model not found")
+	supportedModels := c.GetString("supported_models")
+	if !isModelAllowed(supportedModels, requestModel) {
+		resp.Error(c, http.StatusBadRequest, "model not supported")
 		return
 	}
 
-	supportedModels := c.GetString("supported_models")
-	if !isModelAllowed(supportedModels, requestModel, routingModel) {
-		resp.Error(c, http.StatusBadRequest, "model not supported")
+	group, routingModel, err := resolveRoutingGroup(requestModel, internalRequest.ReasoningEffort, supportedModels, c.Request.Context())
+	if err != nil {
+		resp.Error(c, http.StatusNotFound, "model not found")
 		return
 	}
 

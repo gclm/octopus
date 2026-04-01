@@ -28,6 +28,7 @@ type RelayLog struct {
 	ID                int64            `json:"id" gorm:"primaryKey;autoIncrement:false"` // Snowflake ID
 	Time              int64            `json:"time"`                                     // 时间戳（秒）
 	RequestModelName  string           `json:"request_model_name"`                       // 请求模型名称
+	RoutingModelName  string           `json:"routing_model_name"`                       // 实际命中的路由分组名称
 	RequestAPIKeyName string           `json:"request_api_key_name"`                     // 请求使用的 API Key 名称
 	ChannelId         int              `json:"channel"`                                  // 实际使用的渠道ID
 	ChannelName       string           `json:"channel_name"`                             // 渠道名称

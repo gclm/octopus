@@ -11,6 +11,11 @@ import (
 type groupLookup func(name string, ctx context.Context) (dbmodel.Group, error)
 
 var reasoningGroupSuffixes = []string{"-medium", "-high", "-xhigh"}
+var supportedReasoningGroupEfforts = map[string]bool{
+	"medium": true,
+	"high":   true,
+	"xhigh":  true,
+}
 
 func normalizeReasoningEffort(effort string) string {
 	normalized := strings.ToLower(strings.TrimSpace(effort))
@@ -37,18 +42,23 @@ func preferredReasoningGroupModel(requestModel, reasoningEffort string) string {
 	if requestModel == "" || effort == "" || hasReasoningGroupSuffix(requestModel) {
 		return ""
 	}
+	if !supportedReasoningGroupEfforts[effort] {
+		return ""
+	}
 	return requestModel + "-" + effort
 }
 
-func resolveRoutingGroup(requestModel, reasoningEffort string, ctx context.Context) (dbmodel.Group, string, error) {
-	return resolveRoutingGroupWithLookup(requestModel, reasoningEffort, ctx, op.GroupGetEnabledMap)
+func resolveRoutingGroup(requestModel, reasoningEffort, supportedModels string, ctx context.Context) (dbmodel.Group, string, error) {
+	return resolveRoutingGroupWithLookup(requestModel, reasoningEffort, supportedModels, ctx, op.GroupGetEnabledMap)
 }
 
-func resolveRoutingGroupWithLookup(requestModel, reasoningEffort string, ctx context.Context, lookup groupLookup) (dbmodel.Group, string, error) {
+func resolveRoutingGroupWithLookup(requestModel, reasoningEffort, supportedModels string, ctx context.Context, lookup groupLookup) (dbmodel.Group, string, error) {
 	if preferredModel := preferredReasoningGroupModel(requestModel, reasoningEffort); preferredModel != "" {
-		group, err := lookup(preferredModel, ctx)
-		if err == nil {
-			return group, preferredModel, nil
+		if isModelAllowed(supportedModels, preferredModel) {
+			group, err := lookup(preferredModel, ctx)
+			if err == nil {
+				return group, preferredModel, nil
+			}
 		}
 	}
 
@@ -59,7 +69,7 @@ func resolveRoutingGroupWithLookup(requestModel, reasoningEffort string, ctx con
 	return group, requestModel, nil
 }
 
-func isModelAllowed(supportedModels, requestModel, routingCandidate string) bool {
+func isModelAllowed(supportedModels, model string) bool {
 	if strings.TrimSpace(supportedModels) == "" {
 		return true
 	}
@@ -68,10 +78,7 @@ func isModelAllowed(supportedModels, requestModel, routingCandidate string) bool
 		if candidate == "" {
 			continue
 		}
-		if candidate == requestModel {
-			return true
-		}
-		if routingCandidate != "" && candidate == routingCandidate {
+		if candidate == model {
 			return true
 		}
 	}

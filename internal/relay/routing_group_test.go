@@ -20,6 +20,8 @@ func TestPreferredReasoningGroupModel(t *testing.T) {
 		{name: "xhigh", requestModel: "gpt-5.4", reasoningEffort: "xhigh", want: "gpt-5.4-xhigh"},
 		{name: "extra_high_alias", requestModel: "gpt-5.4", reasoningEffort: "extra high", want: "gpt-5.4-xhigh"},
 		{name: "explicit_derived_group_kept", requestModel: "gpt-5.4-xhigh", reasoningEffort: "medium", want: ""},
+		{name: "unsupported_effort_low", requestModel: "gpt-5.4", reasoningEffort: "low", want: ""},
+		{name: "unsupported_effort_adaptive", requestModel: "gpt-5.4", reasoningEffort: "adaptive", want: ""},
 		{name: "empty_effort", requestModel: "gpt-5.4", reasoningEffort: "", want: ""},
 	}
 
@@ -44,7 +46,7 @@ func TestResolveRoutingGroupWithLookup_PrefersDerivedGroup(t *testing.T) {
 		}
 	}
 
-	group, routingModel, err := resolveRoutingGroupWithLookup("gpt-5.4", "xhigh", context.Background(), lookup)
+	group, routingModel, err := resolveRoutingGroupWithLookup("gpt-5.4", "xhigh", "gpt-5.4,gpt-5.4-xhigh", context.Background(), lookup)
 	if err != nil {
 		t.Fatalf("resolveRoutingGroupWithLookup() error = %v", err)
 	}
@@ -63,7 +65,7 @@ func TestResolveRoutingGroupWithLookup_FallsBackToBaseGroup(t *testing.T) {
 		}
 	}
 
-	group, routingModel, err := resolveRoutingGroupWithLookup("gpt-5.4", "high", context.Background(), lookup)
+	group, routingModel, err := resolveRoutingGroupWithLookup("gpt-5.4", "high", "gpt-5.4,gpt-5.4-high", context.Background(), lookup)
 	if err != nil {
 		t.Fatalf("resolveRoutingGroupWithLookup() error = %v", err)
 	}
@@ -72,14 +74,35 @@ func TestResolveRoutingGroupWithLookup_FallsBackToBaseGroup(t *testing.T) {
 	}
 }
 
-func TestIsModelAllowed_AllowsBaseOrDerivedModel(t *testing.T) {
-	if !isModelAllowed("gpt-5.4", "gpt-5.4", "gpt-5.4-xhigh") {
-		t.Fatal("expected base model to be allowed")
+func TestResolveRoutingGroupWithLookup_DoesNotUpgradeWithoutDerivedAuthorization(t *testing.T) {
+	lookup := func(name string, _ context.Context) (dbmodel.Group, error) {
+		switch name {
+		case "gpt-5.4-xhigh":
+			return dbmodel.Group{Name: name}, nil
+		case "gpt-5.4":
+			return dbmodel.Group{Name: name}, nil
+		default:
+			return dbmodel.Group{}, fmt.Errorf("group not found")
+		}
 	}
-	if !isModelAllowed("gpt-5.4-xhigh", "gpt-5.4", "gpt-5.4-xhigh") {
-		t.Fatal("expected derived model to be allowed")
+
+	group, routingModel, err := resolveRoutingGroupWithLookup("gpt-5.4", "xhigh", "gpt-5.4", context.Background(), lookup)
+	if err != nil {
+		t.Fatalf("resolveRoutingGroupWithLookup() error = %v", err)
 	}
-	if isModelAllowed("gpt-5.4-high", "gpt-5.4", "gpt-5.4-xhigh") {
-		t.Fatal("unexpected unrelated model allowance")
+	if group.Name != "gpt-5.4" || routingModel != "gpt-5.4" {
+		t.Fatalf("unexpected unauthorized upgrade result: group=%q routing=%q", group.Name, routingModel)
+	}
+}
+
+func TestIsModelAllowed_ExactMatchOnly(t *testing.T) {
+	if !isModelAllowed("gpt-5.4", "gpt-5.4") {
+		t.Fatal("expected exact base model to be allowed")
+	}
+	if !isModelAllowed("gpt-5.4-xhigh", "gpt-5.4-xhigh") {
+		t.Fatal("expected exact derived model to be allowed")
+	}
+	if isModelAllowed("gpt-5.4", "gpt-5.4-xhigh") {
+		t.Fatal("unexpected implicit derived model allowance")
 	}
 }

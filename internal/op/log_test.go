@@ -46,6 +46,7 @@ func TestRelayLogAddFlushesWithCanceledRequestContext(t *testing.T) {
 		if err := RelayLogAdd(ctx, model.RelayLog{
 			Time:             time.Now().Unix() + int64(i),
 			RequestModelName: "gpt-5.4",
+			RoutingModelName: "gpt-5.4-xhigh",
 			ActualModelName:  "gpt-5.4-xhigh",
 			ChannelName:      "test-channel",
 			ChannelId:        1,
@@ -61,6 +62,14 @@ func TestRelayLogAddFlushesWithCanceledRequestContext(t *testing.T) {
 	}
 	if count != relayLogMaxSize {
 		t.Fatalf("expected %d relay logs persisted, got %d", relayLogMaxSize, count)
+	}
+
+	var sample model.RelayLog
+	if err := db.GetDB().First(&sample).Error; err != nil {
+		t.Fatalf("load relay log: %v", err)
+	}
+	if sample.RoutingModelName != "gpt-5.4-xhigh" {
+		t.Fatalf("expected routing model name to persist, got %q", sample.RoutingModelName)
 	}
 
 	relayLogCacheLock.Lock()
