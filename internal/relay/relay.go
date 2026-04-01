@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"regexp"
-	"slices"
 	"strings"
 	"time"
 
@@ -36,34 +35,30 @@ func Handler(inboundType inbound.InboundType, c *gin.Context) {
 	if err != nil {
 		return
 	}
-	supportedModels := c.GetString("supported_models")
-	if supportedModels != "" {
-		supportedModelsArray := strings.Split(supportedModels, ",")
-		if !slices.Contains(supportedModelsArray, internalRequest.Model) {
-			resp.Error(c, http.StatusBadRequest, "model not supported")
-			return
-		}
-	}
-
 	requestModel := internalRequest.Model
-	apiKeyID := c.GetInt("api_key_id")
-
-	// 获取通道分组
-	group, err := op.GroupGetEnabledMap(requestModel, c.Request.Context())
+	group, routingModel, err := resolveRoutingGroup(requestModel, internalRequest.ReasoningEffort, c.Request.Context())
 	if err != nil {
 		resp.Error(c, http.StatusNotFound, "model not found")
 		return
 	}
 
+	supportedModels := c.GetString("supported_models")
+	if !isModelAllowed(supportedModels, requestModel, routingModel) {
+		resp.Error(c, http.StatusBadRequest, "model not supported")
+		return
+	}
+
+	apiKeyID := c.GetInt("api_key_id")
+
 	// 创建迭代器（策略排序 + 粘性优先）
-	iter := balancer.NewIterator(group, apiKeyID, requestModel)
+	iter := balancer.NewIterator(group, apiKeyID, routingModel)
 	if iter.Len() == 0 {
 		resp.Error(c, http.StatusServiceUnavailable, "no available channel")
 		return
 	}
 
 	// 初始化 Metrics
-	metrics := NewRelayMetrics(apiKeyID, requestModel, internalRequest)
+	metrics := NewRelayMetrics(apiKeyID, requestModel, routingModel, internalRequest)
 
 	// 请求级上下文
 	req := &relayRequest{
@@ -73,6 +68,7 @@ func Handler(inboundType inbound.InboundType, c *gin.Context) {
 		metrics:         metrics,
 		apiKeyID:        apiKeyID,
 		requestModel:    requestModel,
+		routingModel:    routingModel,
 		iter:            iter,
 	}
 	if endpoint, ok := c.Get(ResponsesEndpointContextKey); ok && endpoint == ResponsesEndpointCompact {
@@ -169,8 +165,8 @@ func Handler(inboundType inbound.InboundType, c *gin.Context) {
 			failureKind = balancer.FailureUnknown
 		}
 
-		log.Infof("request model %s, mode: %d, forwarding to channel: %s model: %s (attempt %d/%d, sticky=%t, base_priority=%d, effective_priority=%d, health=%d, last_failure_kind=%s, cooldown_remaining_ms=%d, channel_exploration=%t, key_exploration=%t)",
-			requestModel, group.Mode, channel.Name, item.ModelName,
+		log.Infof("request model %s, routing model %s, mode: %d, forwarding to channel: %s model: %s (attempt %d/%d, sticky=%t, base_priority=%d, effective_priority=%d, health=%d, last_failure_kind=%s, cooldown_remaining_ms=%d, channel_exploration=%t, key_exploration=%t)",
+			requestModel, routingModel, group.Mode, channel.Name, item.ModelName,
 			iter.Index()+1, iter.Len(), iter.IsSticky(), item.Priority, effectivePriority, health, failureKind, cooldownRemaining.Milliseconds(), iter.ExplorationKind() == "channel", keyExploration.Kind == "key")
 
 		// 构造尝试级上下文 -- 只写变化的 4 个字段
@@ -233,7 +229,7 @@ func (ra *relayAttempt) attempt() attemptResult {
 		balancer.RecordSmartOutcome(ra.channel.ID, ra.internalRequest.Model, true)
 		// 会话保持：更新粘性记录
 		if balancer.ReadyForSticky(ra.channel.ID, ra.usedKey.ID, ra.internalRequest.Model) {
-			balancer.SetSticky(ra.apiKeyID, ra.requestModel, ra.channel.ID, ra.usedKey.ID)
+			balancer.SetSticky(ra.apiKeyID, ra.routingModel, ra.channel.ID, ra.usedKey.ID)
 		}
 		if ra.isCompact {
 			balancer.MarkCompactSupported(ra.channel.ID, ra.internalRequest.Model)

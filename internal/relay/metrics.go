@@ -41,6 +41,7 @@ func summarizeExploration(attempts []model.ChannelAttempt) ExplorationSummary {
 type RelayMetrics struct {
 	APIKeyID     int
 	RequestModel string
+	RoutingModel string
 	StartTime    time.Time
 
 	// 首 Token 时间
@@ -55,10 +56,11 @@ type RelayMetrics struct {
 	Stats       model.StatsMetrics
 }
 
-func NewRelayMetrics(apiKeyID int, requestModel string, req *transformerModel.InternalLLMRequest) *RelayMetrics {
+func NewRelayMetrics(apiKeyID int, requestModel, routingModel string, req *transformerModel.InternalLLMRequest) *RelayMetrics {
 	return &RelayMetrics{
 		APIKeyID:        apiKeyID,
 		RequestModel:    requestModel,
+		RoutingModel:    routingModel,
 		StartTime:       time.Now(),
 		InternalRequest: req,
 	}
@@ -134,13 +136,20 @@ func (m *RelayMetrics) Save(ctx context.Context, success bool, err error, attemp
 	op.StatsAPIKeyUpdate(m.APIKeyID, globalStats)
 	op.StatsChannelUpdate(channelID, globalStats)
 
-	log.Infof("relay complete: request_model=%s actual_model=%s channel=%d(%s) success=%t request_duration_ms=%d request_first_token_ms=%d last_attempt_duration_ms=%d last_attempt_status=%s input_token=%d output_token=%d input_cost=%f output_cost=%f total_cost=%f attempts=%d exploration_total=%d channel_exploration_total=%d key_exploration_total=%d",
-		m.RequestModel, actualModelName(m.RequestModel, m.ActualModel), channelID, channelName, success, duration.Milliseconds(), firstTokenMs, lastAttemptDurationMs, lastAttemptStatus,
+	log.Infof("relay complete: request_model=%s routing_model=%s actual_model=%s channel=%d(%s) success=%t request_duration_ms=%d request_first_token_ms=%d last_attempt_duration_ms=%d last_attempt_status=%s input_token=%d output_token=%d input_cost=%f output_cost=%f total_cost=%f attempts=%d exploration_total=%d channel_exploration_total=%d key_exploration_total=%d",
+		m.RequestModel, routingModelName(m.RequestModel, m.RoutingModel), actualModelName(m.RequestModel, m.ActualModel), channelID, channelName, success, duration.Milliseconds(), firstTokenMs, lastAttemptDurationMs, lastAttemptStatus,
 		m.Stats.InputToken, m.Stats.OutputToken,
 		m.Stats.InputCost, m.Stats.OutputCost, m.Stats.InputCost+m.Stats.OutputCost,
 		len(attempts), explorationSummary.Total, explorationSummary.Channel, explorationSummary.Key)
 
 	m.saveLog(ctx, err, duration, attempts, channelID, channelName)
+}
+
+func routingModelName(requestModel, routingModel string) string {
+	if routingModel != "" {
+		return routingModel
+	}
+	return requestModel
 }
 
 func actualModelName(requestModel, actualModel string) string {

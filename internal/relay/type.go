@@ -60,6 +60,7 @@ type relayRequest struct {
 	metrics         *RelayMetrics
 	apiKeyID        int
 	requestModel    string
+	routingModel    string
 	iter            *balancer.Iterator
 	isCompact       bool
 }
