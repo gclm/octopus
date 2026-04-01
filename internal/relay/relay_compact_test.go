@@ -68,6 +68,22 @@ func TestFormatUpstreamErrorMessage_NonCompactUnchanged(t *testing.T) {
 	}
 }
 
+func TestFormatUpstreamErrorMessage_HTMLBodySummarized(t *testing.T) {
+	body := []byte(`<!DOCTYPE html><html><head><title>524 Timeout</title></head><body><h1>A timeout occurred</h1><p>The origin web server timed out responding to this request.</p><p>Cloudflare Ray ID: 123</p></body></html>`)
+	got := formatUpstreamErrorMessage(false, "gpt-5.4", "gpt-5.4", "/v1/chat/completions", 524, body)
+	if !containsAll(got,
+		"upstream error: 524: html_error_page",
+		`title="524 Timeout"`,
+		`heading="A timeout occurred"`,
+		`preview="524 Timeout A timeout occurred The origin web server timed out responding to this request. Cloudflare Ray ID: 123"`,
+	) {
+		t.Fatalf("unexpected html summary: %s", got)
+	}
+	if strings.Contains(got, "<!DOCTYPE html>") || strings.Contains(got, "<html>") {
+		t.Fatalf("html body should be summarized, got %s", got)
+	}
+}
+
 type testErr string
 
 func (e testErr) Error() string { return string(e) }

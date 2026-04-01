@@ -2,22 +2,24 @@ package relay
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
 
-	"github.com/bestruirui/octopus/internal/helper"
-	dbmodel "github.com/bestruirui/octopus/internal/model"
-	"github.com/bestruirui/octopus/internal/op"
-	"github.com/bestruirui/octopus/internal/relay/balancer"
-	"github.com/bestruirui/octopus/internal/server/resp"
-	"github.com/bestruirui/octopus/internal/transformer/inbound"
-	"github.com/bestruirui/octopus/internal/transformer/model"
-	"github.com/bestruirui/octopus/internal/transformer/outbound"
-	"github.com/bestruirui/octopus/internal/utils/log"
+	"github.com/gclm/octopus/internal/helper"
+	dbmodel "github.com/gclm/octopus/internal/model"
+	"github.com/gclm/octopus/internal/op"
+	"github.com/gclm/octopus/internal/relay/balancer"
+	"github.com/gclm/octopus/internal/server/resp"
+	"github.com/gclm/octopus/internal/transformer/inbound"
+	"github.com/gclm/octopus/internal/transformer/model"
+	"github.com/gclm/octopus/internal/transformer/outbound"
+	"github.com/gclm/octopus/internal/utils/log"
 	"github.com/gin-gonic/gin"
 	"github.com/tmaxmax/go-sse"
 )
@@ -167,7 +169,7 @@ func Handler(inboundType inbound.InboundType, c *gin.Context) {
 			failureKind = balancer.FailureUnknown
 		}
 
-		log.Infof("request model %s, mode: %d, forwarding to channel: %s model: %s (attempt %d/%d, sticky=%t, priority=%d, effective_priority=%d, health=%d, last_failure_kind=%s, cooldown_remaining_ms=%d, channel_exploration=%t, key_exploration=%t)",
+		log.Infof("request model %s, mode: %d, forwarding to channel: %s model: %s (attempt %d/%d, sticky=%t, base_priority=%d, effective_priority=%d, health=%d, last_failure_kind=%s, cooldown_remaining_ms=%d, channel_exploration=%t, key_exploration=%t)",
 			requestModel, group.Mode, channel.Name, item.ModelName,
 			iter.Index()+1, iter.Len(), iter.IsSticky(), item.Priority, effectivePriority, health, failureKind, cooldownRemaining.Milliseconds(), iter.ExplorationKind() == "channel", keyExploration.Kind == "key")
 
@@ -329,8 +331,12 @@ func containsAny(msg string, patterns ...string) bool {
 	return false
 }
 
+var htmlTagPattern = regexp.MustCompile(`(?s)<[^>]+>`)
+var whitespacePattern = regexp.MustCompile(`\s+`)
+
 func formatUpstreamErrorMessage(isCompact bool, requestModel, routedModel, endpointPath string, statusCode int, body []byte) string {
-	base := fmt.Sprintf("upstream error: %d: %s", statusCode, string(body))
+	bodySummary := summarizeUpstreamBody(body)
+	base := fmt.Sprintf("upstream error: %d: %s", statusCode, bodySummary)
 	if !isCompact {
 		return base
 	}
@@ -345,6 +351,97 @@ func formatUpstreamErrorMessage(isCompact bool, requestModel, routedModel, endpo
 		parts = append(parts, `note="upstream provider may internally map compact endpoint models to *-openai-compact aliases"`)
 	}
 	return fmt.Sprintf("%s [compact relay context: %s]", base, strings.Join(parts, ", "))
+}
+
+func summarizeUpstreamBody(body []byte) string {
+	trimmed := strings.TrimSpace(string(body))
+	if trimmed == "" {
+		return "<empty body>"
+	}
+
+	if summary, ok := summarizeJSONBody(trimmed); ok {
+		return summary
+	}
+
+	if summary, ok := summarizeHTMLBody(trimmed); ok {
+		return summary
+	}
+
+	return summarizePlainBody(trimmed)
+}
+
+func summarizeJSONBody(body string) (string, bool) {
+	var payload any
+	if err := json.Unmarshal([]byte(body), &payload); err != nil {
+		return "", false
+	}
+	if compact, err := json.Marshal(payload); err == nil {
+		return truncateForLog(string(compact), 512), true
+	}
+	return truncateForLog(body, 512), true
+}
+
+func summarizeHTMLBody(body string) (string, bool) {
+	lower := strings.ToLower(body)
+	if !strings.Contains(lower, "<html") && !strings.Contains(lower, "<!doctype html") {
+		return "", false
+	}
+	title := extractTagText(lower, body, "title")
+	h1 := extractTagText(lower, body, "h1")
+	text := htmlTagPattern.ReplaceAllString(body, " ")
+	text = whitespacePattern.ReplaceAllString(strings.TrimSpace(text), " ")
+	parts := []string{"html_error_page"}
+	if title != "" {
+		parts = append(parts, fmt.Sprintf("title=%q", truncateForLog(title, 120)))
+	}
+	if h1 != "" && !strings.EqualFold(h1, title) {
+		parts = append(parts, fmt.Sprintf("heading=%q", truncateForLog(h1, 120)))
+	}
+	if text != "" {
+		parts = append(parts, fmt.Sprintf("preview=%q", truncateForLog(text, 200)))
+	}
+	return strings.Join(parts, " "), true
+}
+
+func extractTagText(lowerBody, originalBody, tag string) string {
+	open := "<" + tag
+	start := strings.Index(lowerBody, open)
+	if start < 0 {
+		return ""
+	}
+	start = strings.Index(lowerBody[start:], ">")
+	if start < 0 {
+		return ""
+	}
+	absoluteStart := strings.Index(lowerBody, open) + start + 1
+	endToken := "</" + tag + ">"
+	end := strings.Index(lowerBody[absoluteStart:], endToken)
+	if end < 0 {
+		return ""
+	}
+	content := originalBody[absoluteStart : absoluteStart+end]
+	content = htmlTagPattern.ReplaceAllString(content, " ")
+	content = whitespacePattern.ReplaceAllString(strings.TrimSpace(content), " ")
+	return content
+}
+
+func summarizePlainBody(body string) string {
+	body = whitespacePattern.ReplaceAllString(strings.TrimSpace(body), " ")
+	return truncateForLog(body, 240)
+}
+
+func truncateForLog(value string, max int) string {
+	if max <= 0 {
+		return ""
+	}
+	runes := []rune(value)
+	if len(runes) <= max {
+		return value
+	}
+	if max <= 3 {
+		return string(runes[:max])
+	}
+	return string(runes[:max-3]) + "..."
 }
 
 // parseRequest 解析并验证入站请求
