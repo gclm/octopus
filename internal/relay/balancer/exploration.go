@@ -94,6 +94,17 @@ func maybePromoteExploration(group model.Group, candidates []model.GroupItem) Ex
 		return ExplorationDecision{}
 	}
 
+	switch group.Mode {
+	case model.GroupModeWeighted:
+		return maybePromoteWeightedExploration(candidates)
+	case model.GroupModeFailover:
+		return maybePromoteFailoverExploration(candidates)
+	default:
+		return ExplorationDecision{}
+	}
+}
+
+func maybePromoteFailoverExploration(candidates []model.GroupItem) ExplorationDecision {
 	basePriority := candidates[0].Priority
 	bestIdx := -1
 	bestLastAttempt := time.Time{}
@@ -122,6 +133,45 @@ func maybePromoteExploration(group model.Group, candidates []model.GroupItem) Ex
 	copy(candidates[1:bestIdx+1], candidates[:bestIdx])
 	candidates[0] = promoted
 	return ExplorationDecision{Kind: "channel", CandidateID: promoted.ChannelID}
+}
+
+func maybePromoteWeightedExploration(candidates []model.GroupItem) ExplorationDecision {
+	bestIdx := -1
+	bestLastAttempt := time.Time{}
+
+	for i := 1; i < len(candidates); i++ {
+		candidate := candidates[i]
+		if OrderingHealthScore(candidate.ChannelID, 0, candidate.ModelName) < 0 {
+			continue
+		}
+		lastAttempt := lastRouteAttempt(candidate.ChannelID, candidate.ModelName)
+		if shouldPreferWeightedExplorationCandidate(bestIdx, bestLastAttempt, lastAttempt) {
+			bestIdx = i
+			bestLastAttempt = lastAttempt
+		}
+	}
+
+	if bestIdx <= 0 {
+		return ExplorationDecision{}
+	}
+
+	promoted := candidates[bestIdx]
+	copy(candidates[1:bestIdx+1], candidates[:bestIdx])
+	candidates[0] = promoted
+	return ExplorationDecision{Kind: "channel", CandidateID: promoted.ChannelID}
+}
+
+func shouldPreferWeightedExplorationCandidate(currentIdx int, currentLastAttempt time.Time, nextLastAttempt time.Time) bool {
+	if currentIdx == -1 {
+		return true
+	}
+	if currentLastAttempt.IsZero() != nextLastAttempt.IsZero() {
+		return nextLastAttempt.IsZero()
+	}
+	if currentLastAttempt.IsZero() {
+		return false
+	}
+	return nextLastAttempt.Before(currentLastAttempt)
 }
 
 func resetExplorationStateForTest() {

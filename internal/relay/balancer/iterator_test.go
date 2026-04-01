@@ -186,3 +186,61 @@ func TestNewIteratorDoesNotExploreRoundRobinGroups(t *testing.T) {
 		t.Fatalf("expected round robin order to stay intact without exploration, got %+v", iter.Item())
 	}
 }
+
+func TestNewIteratorWeightedExploresColdStartCandidate(t *testing.T) {
+	prepareCircuitTest(t)
+	explorationEveryOverride = 1
+	base := time.Unix(240*60, 0).UTC()
+	smartNowFunc = func() time.Time { return base }
+	explorationNowFunc = func() time.Time { return base }
+	t.Cleanup(func() { smartNowFunc = time.Now })
+
+	for i := 0; i < 30; i++ {
+		recordSmartOutcome(1, "m", true)
+	}
+	RecordRouteAttempt(1, "m")
+	base = base.Add(30 * time.Minute)
+	RecordRouteAttempt(1, "m")
+
+	group := model.Group{
+		ID:   88,
+		Mode: model.GroupModeWeighted,
+		Items: []model.GroupItem{
+			{ID: 1, ChannelID: 1, ModelName: "m", Weight: 80, Priority: 1},
+			{ID: 2, ChannelID: 2, ModelName: "m", Weight: 20, Priority: 5},
+		},
+	}
+
+	iter := NewIterator(group, 0, "m")
+	if !iter.Next() || iter.Item().ChannelID != 2 {
+		t.Fatalf("expected weighted exploration to give cold-start candidate a sample, got %+v", iter.Item())
+	}
+}
+
+func TestNewIteratorWeightedKeepsPrimaryOrderWithoutExploration(t *testing.T) {
+	prepareCircuitTest(t)
+	explorationEveryOverride = 6
+	base := time.Unix(240*60, 0).UTC()
+	smartNowFunc = func() time.Time { return base }
+	explorationNowFunc = func() time.Time { return base }
+	t.Cleanup(func() { smartNowFunc = time.Now })
+
+	for i := 0; i < 30; i++ {
+		recordSmartOutcome(1, "m", true)
+	}
+	RecordFailure(2, 1, "m", FailureTLSError)
+
+	group := model.Group{
+		ID:   89,
+		Mode: model.GroupModeWeighted,
+		Items: []model.GroupItem{
+			{ID: 1, ChannelID: 1, ModelName: "m", Weight: 80, Priority: 1},
+			{ID: 2, ChannelID: 2, ModelName: "m", Weight: 20, Priority: 1},
+		},
+	}
+
+	iter := NewIterator(group, 0, "m")
+	if !iter.Next() || iter.Item().ChannelID != 1 {
+		t.Fatalf("expected weighted primary order to stay intact without exploration, got %+v", iter.Item())
+	}
+}

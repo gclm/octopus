@@ -32,10 +32,12 @@ func NewIterator(group model.Group, apiKeyID int, requestModel string) *Iterator
 	} else {
 		candidates = GetBalancer(group.Mode).Candidates(group.Items)
 	}
-	applyHealthOrder(candidates)
+	if group.Mode == model.GroupModeFailover {
+		applyHealthOrder(candidates)
+	}
 
 	stickyIdx := -1
-	if group.SessionKeepTime > 0 {
+	if group.SessionKeepTime > 0 && group.Mode == model.GroupModeFailover {
 		stickyTTL := time.Duration(group.SessionKeepTime) * time.Second
 		if sticky := GetSticky(apiKeyID, requestModel, stickyTTL); sticky != nil {
 			for i, item := range candidates {
@@ -67,8 +69,8 @@ func NewIterator(group model.Group, apiKeyID int, requestModel string) *Iterator
 }
 
 func applyHealthOrder(candidates []model.GroupItem) {
-	// 健康分只负责降级明确不健康的候选，不再奖励成功样本更多的候选。
-	// 当存在惩罚时，仅在同惩罚组内按健康分做局部排序；完全健康时保持基础顺序。
+	// Failover 仍保留惩罚型排序：只把明确不健康的候选适度后移，
+	// 避免高优先级坏通道长期卡在最前。
 	sort.SliceStable(candidates, func(i, j int) bool {
 		left := candidates[i]
 		right := candidates[j]
