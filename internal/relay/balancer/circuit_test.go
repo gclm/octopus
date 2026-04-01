@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bestruirui/octopus/internal/model"
+	"github.com/gclm/octopus/internal/model"
 )
 
 func prepareCircuitTest(t *testing.T) {

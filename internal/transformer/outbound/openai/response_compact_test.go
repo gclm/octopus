@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bestruirui/octopus/internal/transformer/model"
+	"github.com/gclm/octopus/internal/transformer/model"
 )
 
 func TestCompactResponseOutbound_TransformRequest(t *testing.T) {

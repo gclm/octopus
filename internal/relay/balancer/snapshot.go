@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bestruirui/octopus/internal/model"
+	"github.com/gclm/octopus/internal/model"
 )
 
 type keyHealthAggregate struct {

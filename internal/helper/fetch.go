@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/bestruirui/octopus/internal/model"
-	"github.com/bestruirui/octopus/internal/transformer/outbound"
 	"github.com/dlclark/regexp2"
+	"github.com/gclm/octopus/internal/model"
+	"github.com/gclm/octopus/internal/transformer/outbound"
 )
 
 func FetchModels(ctx context.Context, request model.Channel) ([]string, error) {

@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bestruirui/octopus/internal/client"
-	"github.com/bestruirui/octopus/internal/conf"
-	"github.com/bestruirui/octopus/internal/utils/log"
+	"github.com/gclm/octopus/internal/client"
+	"github.com/gclm/octopus/internal/conf"
+	"github.com/gclm/octopus/internal/utils/log"
 )
 
 type LatestInfo struct {

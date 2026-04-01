@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 
-	"github.com/bestruirui/octopus/internal/transformer/model"
+	"github.com/gclm/octopus/internal/transformer/model"
 )
 
 type EmbeddingInbound struct {

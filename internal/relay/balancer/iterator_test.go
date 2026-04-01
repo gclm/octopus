@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bestruirui/octopus/internal/model"
+	"github.com/gclm/octopus/internal/model"
 )
 
 func TestApplyHealthOrderWithinSamePriority(t *testing.T) {

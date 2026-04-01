@@ -6,8 +6,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/bestruirui/octopus/internal/model"
-	"github.com/bestruirui/octopus/internal/op"
+	"github.com/gclm/octopus/internal/model"
+	"github.com/gclm/octopus/internal/op"
 )
 
 const defaultExplorationEvery = 6

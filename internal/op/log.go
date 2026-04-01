@@ -7,14 +7,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bestruirui/octopus/internal/db"
-	"github.com/bestruirui/octopus/internal/model"
-	"github.com/bestruirui/octopus/internal/utils/log"
-	"github.com/bestruirui/octopus/internal/utils/snowflake"
+	"github.com/gclm/octopus/internal/db"
+	"github.com/gclm/octopus/internal/model"
+	"github.com/gclm/octopus/internal/utils/log"
+	"github.com/gclm/octopus/internal/utils/snowflake"
 )
 
 const relayLogMaxSize = 20
 const relayLogMaxSizeNoDB = 100 // 当不保存到数据库时，允许更大的缓存用于实时查询
+const relayLogFlushTimeout = 5 * time.Second
 
 var relayLogCache = make([]model.RelayLog, 0, relayLogMaxSize)
 var relayLogCacheLock sync.Mutex
@@ -81,6 +82,14 @@ func notifySubscribers(relayLog model.RelayLog) {
 	}
 }
 
+func relayLogFlushContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	baseCtx := context.Background()
+	if ctx != nil {
+		baseCtx = context.WithoutCancel(ctx)
+	}
+	return context.WithTimeout(baseCtx, relayLogFlushTimeout)
+}
+
 func relayLogFlushToDB(ctx context.Context) error {
 	relayLogFlushLock.Lock()
 	defer relayLogFlushLock.Unlock()
@@ -131,7 +140,9 @@ func RelayLogAdd(ctx context.Context, relayLog model.RelayLog) error {
 	if len(relayLogCache) >= maxSize {
 		if enabled {
 			relayLogCacheLock.Unlock()
-			return relayLogFlushToDB(ctx)
+			flushCtx, cancel := relayLogFlushContext(ctx)
+			defer cancel()
+			return relayLogFlushToDB(flushCtx)
 		}
 		// 如果未启用日志保存，移除最旧的日志，保留最新的日志用于实时查询
 		keepSize := maxSize / 2

@@ -14,8 +14,8 @@ const (
 	smartWeight24h    = 0.20
 	smart1hMinSamples = 20
 
-	smartRatePriorSuccess = 1.0
-	smartRatePriorFailure = 1.0
+	smartRatePriorSuccess      = 1.0
+	smartRatePriorFailure      = 1.0
 	smartOneHourPenaltyDivisor = 3.0
 )
 

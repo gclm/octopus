@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bestruirui/octopus/internal/model"
+	"github.com/gclm/octopus/internal/model"
 )
 
 func TestSnapshotChannelRuntimeHealthBuildsSummaryAndKeyRoutes(t *testing.T) {

@@ -7,7 +7,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/bestruirui/octopus/internal/model"
+	"github.com/gclm/octopus/internal/model"
 )
 
 var roundRobinCounters sync.Map // key: scope -> *atomic.Uint64
@@ -34,7 +34,7 @@ func roundRobinCandidates(scope string, items []model.GroupItem) []model.GroupIt
 		result[i] = items[(idx+i)%n]
 	}
 	return result
-	}
+}
 
 func roundRobinScopeForGroup(groupID int) string {
 	return "group:" + strconv.Itoa(groupID)
@@ -124,8 +124,8 @@ func (b *Weighted) Candidates(items []model.GroupItem) []model.GroupItem {
 	// 以快速压低短时不稳定通道。
 	// 同分时按权重、优先级稳定排序，避免抖动。
 	type scoredItem struct {
-		item   model.GroupItem
-		score  float64
+		item  model.GroupItem
+		score float64
 	}
 
 	totalWeight := 0.0

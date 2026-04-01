@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/bestruirui/octopus/internal/db"
-	"github.com/bestruirui/octopus/internal/model"
-	"github.com/bestruirui/octopus/internal/utils/cache"
+	"github.com/gclm/octopus/internal/db"
+	"github.com/gclm/octopus/internal/model"
+	"github.com/gclm/octopus/internal/utils/cache"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
