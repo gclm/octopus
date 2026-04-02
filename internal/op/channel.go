@@ -154,6 +154,7 @@ func scoreChannelKey(channel *model.Channel, key model.ChannelKey, modelName str
 	if channel == nil {
 		return 0
 	}
+	weights := GetHealthScoreWeights()
 	totalKeys := len(channel.Keys)
 	enabledKeys := 0
 	for _, item := range channel.Keys {
@@ -181,15 +182,15 @@ func scoreChannelKey(channel *model.Channel, key model.ChannelKey, modelName str
 
 	score := ComputeHealthScore(stats, baseDelay, enabledKeys, totalKeys)
 	if key.StatusCode == 429 {
-		score -= 30
+		score -= weights.RateLimitPenalty
 	}
 	if key.LastUseTimeStamp > 0 {
 		ageSeconds := time.Now().Unix() - key.LastUseTimeStamp
 		if ageSeconds < int64(10*time.Minute/time.Second) {
-			score += 5
+			score += weights.RecentUseBonus
 		}
 	}
-	score -= key.TotalCost * 2
+	score -= key.TotalCost * weights.CostPenalty
 	return score
 }
 
@@ -420,6 +421,12 @@ func ChannelLLMList(ctx context.Context) ([]model.LLMChannel, error) {
 	models := []model.LLMChannel{}
 	for _, channel := range channelCache.GetAll() {
 		modelNames := xstrings.SplitTrimCompact(",", channel.Model, channel.CustomModel)
+		enabledKeyCount := 0
+		for _, key := range channel.Keys {
+			if key.Enabled && key.ChannelKey != "" {
+				enabledKeyCount++
+			}
+		}
 		for _, modelName := range modelNames {
 			if modelName == "" {
 				continue
@@ -429,6 +436,8 @@ func ChannelLLMList(ctx context.Context) ([]model.LLMChannel, error) {
 				Enabled:     channel.Enabled,
 				ChannelID:   channel.ID,
 				ChannelName: channel.Name,
+				BaseURL:     channel.GetBaseUrl(),
+				KeyCount:    enabledKeyCount,
 			})
 		}
 	}

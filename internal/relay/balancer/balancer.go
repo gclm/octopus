@@ -155,6 +155,7 @@ func scoreGroupItem(item model.GroupItem) float64 {
 	if err != nil {
 		return 0
 	}
+	weights := op.GetHealthScoreWeights()
 	totalKeys := len(channel.Keys)
 	enabledKeys := 0
 	for _, key := range channel.Keys {
@@ -178,10 +179,10 @@ func scoreGroupItem(item model.GroupItem) float64 {
 	}
 	score := op.ComputeHealthScore(stats, baseDelay, enabledKeys, totalKeys)
 	if item.Priority > 0 {
-		score += 10.0 / float64(item.Priority)
+		score += weights.PriorityBoost / float64(item.Priority)
 	}
 	if item.Weight > 0 {
-		score += float64(item.Weight) * 0.5
+		score += float64(item.Weight) * weights.WeightBoost
 	}
 	return score
 }

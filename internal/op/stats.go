@@ -2,6 +2,7 @@ package op
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"hash/fnv"
@@ -38,6 +39,18 @@ var statsModelCacheNeedUpdateLock sync.Mutex
 var statsAPIKeyCache = cache.New[int, model.StatsAPIKey](16)
 var statsAPIKeyCacheNeedUpdate = make(map[int]struct{})
 var statsAPIKeyCacheNeedUpdateLock sync.Mutex
+
+func GetHealthScoreWeights() model.HealthScoreWeights {
+	raw, err := SettingGetString(model.SettingKeyHealthScoreWeights)
+	if err != nil || raw == "" {
+		return model.DefaultHealthScoreWeights()
+	}
+	weights := model.DefaultHealthScoreWeights()
+	if err := json.Unmarshal([]byte(raw), &weights); err != nil {
+		return model.DefaultHealthScoreWeights()
+	}
+	return weights
+}
 
 func StatsSaveDBTask() {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
@@ -316,14 +329,15 @@ func StatsModelKey(channelID int, modelName string) int {
 }
 
 func ComputeHealthScore(metrics model.StatsMetrics, baseDelay int, enabledKeys, totalKeys int) float64 {
+	weights := GetHealthScoreWeights()
 	totalRequests := metrics.RequestSuccess + metrics.RequestFailed
 	if totalRequests == 0 {
-		score := 70.0
+		score := weights.ColdStartScore
 		if baseDelay > 0 {
-			score -= clamp(float64(baseDelay)/40.0, 0, 15)
+			score -= clamp(float64(baseDelay)/50.0, 0, weights.BaseDelay)
 		}
 		if totalKeys > 0 {
-			score += clamp(float64(enabledKeys)/float64(totalKeys)*10.0, 0, 10)
+			score += clamp(float64(enabledKeys)/float64(totalKeys)*weights.KeyAvailability, 0, weights.KeyAvailability)
 		}
 		return clamp(score, 0, 100)
 	}
@@ -334,13 +348,13 @@ func ComputeHealthScore(metrics model.StatsMetrics, baseDelay int, enabledKeys, 
 		avgWait = float64(metrics.WaitTime) / float64(totalRequests)
 	}
 
-	score := successRate * 70.0
-	score += clamp(20.0-avgWait/150.0, 0, 20)
+	score := successRate * weights.SuccessRate
+	score += clamp(weights.AvgWait-avgWait/150.0, 0, weights.AvgWait)
 	if totalKeys > 0 {
-		score += clamp(float64(enabledKeys)/float64(totalKeys)*10.0, 0, 10)
+		score += clamp(float64(enabledKeys)/float64(totalKeys)*weights.KeyAvailability, 0, weights.KeyAvailability)
 	}
 	if baseDelay > 0 {
-		score -= clamp(float64(baseDelay)/50.0, 0, 10)
+		score -= clamp(float64(baseDelay)/50.0, 0, weights.BaseDelay)
 	}
 
 	return clamp(score, 0, 100)
