@@ -75,6 +75,28 @@ services:
     restart: unless-stopped
 ```
 
+仓库里也附带了一个可直接复用的示例文件：
+
+```bash
+cp docker-compose.ghcr.yml docker-compose.yml
+docker compose up -d
+```
+
+默认会拉取：
+
+```bash
+ghcr.io/zbsdsb/octopus:dev
+```
+
+如果你要换成自己的用户名或指定 tag，可以在启动前覆盖环境变量：
+
+```bash
+export OCTOPUS_IMAGE=ghcr.io/<你的 GitHub 用户名>/octopus:dev
+export OCTOPUS_DATA_DIR=./data
+export OCTOPUS_PORT=8080
+docker compose -f docker-compose.ghcr.yml up -d
+```
+
 如果镜像仓库是私有的，拉取前先登录：
 
 ```bash

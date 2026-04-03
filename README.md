@@ -75,6 +75,28 @@ services:
     restart: unless-stopped
 ```
 
+The repository also includes a ready-to-use example file:
+
+```bash
+cp docker-compose.ghcr.yml docker-compose.yml
+docker compose up -d
+```
+
+By default it pulls:
+
+```bash
+ghcr.io/zbsdsb/octopus:dev
+```
+
+If you want to switch to your own namespace or a specific tag, override the environment variables before startup:
+
+```bash
+export OCTOPUS_IMAGE=ghcr.io/<your-github-user>/octopus:dev
+export OCTOPUS_DATA_DIR=./data
+export OCTOPUS_PORT=8080
+docker compose -f docker-compose.ghcr.yml up -d
+```
+
 If the package is private, log in before pulling:
 
 ```bash
