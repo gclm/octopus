@@ -48,6 +48,8 @@ docker compose up -d
 
 - Debian 镜像：`ghcr.io/<你的 GitHub 用户名>/octopus:latest`
 - Alpine 镜像：`ghcr.io/<你的 GitHub 用户名>/octopus:latest-alpine`
+- `dev` 分支预览镜像：`ghcr.io/<你的 GitHub 用户名>/octopus:dev`
+- `dev` 分支 Alpine 预览镜像：`ghcr.io/<你的 GitHub 用户名>/octopus:dev-alpine`
 
 例如，你的 fork 是 `zbsdsb/octopus`，则镜像地址会是：
 
@@ -85,15 +87,28 @@ docker login ghcr.io -u <你的 GitHub 用户名>
 - 触发条件：`push` 到 `master`
 - 镜像地址：`ghcr.io/${github.repository}`
 
+另外，本分支还补充了一个面向 fork 的开发镜像工作流：
+
+- 触发文件：`.github/workflows/docker-dev.yaml`
+- 触发条件：`push` 到 `dev` 或手动触发
+- 产出标签：
+  - `ghcr.io/<你的 GitHub 用户名>/octopus:dev`
+  - `ghcr.io/<你的 GitHub 用户名>/octopus:dev-alpine`
+  - `ghcr.io/<你的 GitHub 用户名>/octopus:dev-<commit-sha>`
+  - `ghcr.io/<你的 GitHub 用户名>/octopus:dev-<commit-sha>-alpine`
+
 也就是说，在你的 fork 中，只有代码进入 `master` 后，工作流才会自动发布：
 
 - `ghcr.io/<你的 GitHub 用户名>/octopus:latest`
 - `ghcr.io/<你的 GitHub 用户名>/octopus:latest-alpine`
 
+如果你把当前功能合并到了 `dev`，则会自动发布 `dev` 标签镜像，适合日常测试或内部部署。
+
 如果你当前还没有把功能分支合并到 `master`，有两种方式可选：
 
 1. 合并到 `master`，等待 GitHub Actions 自动构建并推送镜像。
-2. 在本地或服务器手动构建镜像，再推送到你的镜像仓库。
+2. 合并到 `dev`，等待 `docker-dev.yaml` 自动构建并推送 `:dev` 镜像。
+3. 在本地或服务器手动构建镜像，再推送到你的镜像仓库。
 
 手动构建的大致流程如下：
 

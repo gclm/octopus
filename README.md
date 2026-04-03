@@ -48,6 +48,8 @@ If you fork this repository and want other users to deploy your maintained image
 
 - Debian image: `ghcr.io/<your-github-user>/octopus:latest`
 - Alpine image: `ghcr.io/<your-github-user>/octopus:latest-alpine`
+- `dev` branch preview image: `ghcr.io/<your-github-user>/octopus:dev`
+- `dev` branch Alpine preview image: `ghcr.io/<your-github-user>/octopus:dev-alpine`
 
 For example, if your fork is `zbsdsb/octopus`, the image becomes:
 
@@ -85,15 +87,28 @@ If you want your fork to publish GHCR images automatically, note the current rel
 - Trigger: `push` to `master`
 - Image name: `ghcr.io/${github.repository}`
 
+This branch also adds a fork-friendly development image workflow:
+
+- Workflow file: `.github/workflows/docker-dev.yaml`
+- Trigger: `push` to `dev` or manual dispatch
+- Tags produced:
+  - `ghcr.io/<your-github-user>/octopus:dev`
+  - `ghcr.io/<your-github-user>/octopus:dev-alpine`
+  - `ghcr.io/<your-github-user>/octopus:dev-<commit-sha>`
+  - `ghcr.io/<your-github-user>/octopus:dev-<commit-sha>-alpine`
+
 That means your fork will only auto-publish after code lands on `master`, producing:
 
 - `ghcr.io/<your-github-user>/octopus:latest`
 - `ghcr.io/<your-github-user>/octopus:latest-alpine`
 
+If you merge this work into `dev`, the fork can also auto-publish `dev` tags for day-to-day testing and internal deployments.
+
 If your changes are still on a feature branch, you have two options:
 
 1. Merge the branch into `master` and let GitHub Actions build and publish the image.
-2. Build and push the image manually from your local machine or deployment server.
+2. Merge the branch into `dev` and let `docker-dev.yaml` build and publish the `:dev` image.
+3. Build and push the image manually from your local machine or deployment server.
 
 A manual build flow looks like this:
 
