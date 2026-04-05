@@ -22,6 +22,8 @@ import (
 	"github.com/tmaxmax/go-sse"
 )
 
+var channelHTTPClient = helper.ChannelHttpClient
+
 // Handler 处理入站请求并转发到上游服务
 func Handler(inboundType inbound.InboundType, c *gin.Context) {
 	// 解析请求
@@ -50,7 +52,7 @@ func Handler(inboundType inbound.InboundType, c *gin.Context) {
 	group.FirstTokenTimeOut, group.SessionKeepTime = op.ResolveGroupRuntimeOptions(group)
 
 	// 创建迭代器（策略排序 + 粘性优先）
-	iter := balancer.NewIterator(group, apiKeyID, requestModel)
+	iter := balancer.NewIterator(group, apiKeyID, requestModel, internalRequest)
 	if iter.Len() == 0 {
 		resp.Error(c, http.StatusServiceUnavailable, "no available channel")
 		return
@@ -69,6 +71,10 @@ func Handler(inboundType inbound.InboundType, c *gin.Context) {
 		apiKeyID:        apiKeyID,
 		requestModel:    requestModel,
 		iter:            iter,
+		inboundType:     inboundType,
+	}
+	if endpoint, ok := c.Get(ResponsesEndpointContextKey); ok && endpoint == ResponsesEndpointCompact {
+		req.isCompact = true
 	}
 
 	var lastErr error
@@ -97,60 +103,80 @@ func Handler(inboundType inbound.InboundType, c *gin.Context) {
 			continue
 		}
 
-		usedKey := op.ChannelSelectKey(channel, group.Mode, item.ModelName)
-		if usedKey.ChannelKey == "" {
+		selectedKeys := op.ChannelSelectKeys(channel, group.Mode, item.ModelName)
+		if len(selectedKeys) == 0 {
 			iter.Skip(channel.ID, 0, channel.Name, "no available key")
 			continue
 		}
-
-		// 熔断检查
-		if iter.SkipCircuitBreak(channel.ID, usedKey.ID, channel.Name) {
-			continue
+		if req.isCompact {
+			if unsupported, remaining := balancer.IsCompactUnsupported(channel.ID, item.ModelName); unsupported {
+				msg := "compact endpoint unsupported"
+				if remaining > 0 {
+					msg = fmt.Sprintf("compact endpoint unsupported, remaining cooldown: %ds", int(remaining.Seconds()))
+				}
+				iter.Skip(channel.ID, 0, channel.Name, msg)
+				continue
+			}
 		}
 
 		// 出站适配器
 		outAdapter := outbound.Get(channel.Type)
+		if req.isCompact {
+			if channel.Type != outbound.OutboundTypeOpenAIResponse {
+				iter.Skip(channel.ID, 0, channel.Name, "channel type not compatible with compact request")
+				continue
+			}
+			if inboundType == inbound.InboundTypeOpenAIResponse && channel.Type == outbound.OutboundTypeOpenAIResponse {
+				outAdapter = outbound.NewOpenAICompactResponse()
+			}
+		}
 		if outAdapter == nil {
-			iter.Skip(channel.ID, usedKey.ID, channel.Name, fmt.Sprintf("unsupported channel type: %d", channel.Type))
+			iter.Skip(channel.ID, 0, channel.Name, fmt.Sprintf("unsupported channel type: %d", channel.Type))
 			continue
 		}
 
 		// 类型兼容性检查
 		if internalRequest.IsEmbeddingRequest() && !outbound.IsEmbeddingChannelType(channel.Type) {
-			iter.Skip(channel.ID, usedKey.ID, channel.Name, "channel type not compatible with embedding request")
+			iter.Skip(channel.ID, 0, channel.Name, "channel type not compatible with embedding request")
 			continue
 		}
 		if internalRequest.IsChatRequest() && !outbound.IsChatChannelType(channel.Type) {
-			iter.Skip(channel.ID, usedKey.ID, channel.Name, "channel type not compatible with chat request")
+			iter.Skip(channel.ID, 0, channel.Name, "channel type not compatible with chat request")
 			continue
 		}
 
 		// 设置实际模型
 		internalRequest.Model = item.ModelName
 
-		log.Infof("request model %s, mode: %d, forwarding to channel: %s model: %s (attempt %d/%d, sticky=%t)",
-			requestModel, group.Mode, channel.Name, item.ModelName,
-			iter.Index()+1, iter.Len(), iter.IsSticky())
+		for keyIndex, usedKey := range selectedKeys {
+			if iter.SkipCircuitBreak(channel.ID, usedKey.ID, channel.Name) {
+				continue
+			}
 
-		// 构造尝试级上下文 -- 只写变化的 4 个字段
-		ra := &relayAttempt{
-			relayRequest:         req,
-			outAdapter:           outAdapter,
-			channel:              channel,
-			usedKey:              usedKey,
-			firstTokenTimeOutSec: group.FirstTokenTimeOut,
-		}
+			log.Infof("request model %s, mode: %d, forwarding to channel: %s model: %s (channel attempt %d/%d, key attempt %d/%d, sticky=%t)",
+				requestModel, group.Mode, channel.Name, item.ModelName,
+				iter.Index()+1, iter.Len(), keyIndex+1, len(selectedKeys), iter.IsSticky())
 
-		result := ra.attempt()
-		if result.Success {
-			metrics.Save(c.Request.Context(), true, nil, iter.Attempts())
-			return
+			// 构造尝试级上下文 -- 只写变化的 4 个字段
+			ra := &relayAttempt{
+				relayRequest:         req,
+				outAdapter:           outAdapter,
+				channel:              channel,
+				usedKey:              usedKey,
+				firstTokenTimeOutSec: group.FirstTokenTimeOut,
+			}
+
+			result := ra.attempt()
+			if result.Success {
+				metrics.Save(c.Request.Context(), true, nil, iter.Attempts())
+				return
+			}
+			if result.Written {
+				metrics.Save(c.Request.Context(), false, result.Err, iter.Attempts())
+				return
+			}
+			lastErr = result.Err
 		}
-		if result.Written {
-			metrics.Save(c.Request.Context(), false, result.Err, iter.Attempts())
-			return
-		}
-		lastErr = result.Err
 	}
 
 	// 所有通道都失败
@@ -230,6 +256,9 @@ func (ra *relayAttempt) attempt() attemptResult {
 		balancer.RecordSuccess(ra.channel.ID, ra.usedKey.ID, ra.internalRequest.Model)
 		// 会话保持：更新粘性记录
 		balancer.SetSticky(ra.apiKeyID, ra.requestModel, ra.channel.ID, ra.usedKey.ID)
+		if ra.isCompact {
+			balancer.MarkCompactSupported(ra.channel.ID, ra.internalRequest.Model)
+		}
 
 		return attemptResult{Success: true}
 	}
@@ -255,6 +284,9 @@ func (ra *relayAttempt) attempt() attemptResult {
 
 	// 熔断器：记录失败
 	balancer.RecordFailure(ra.channel.ID, ra.usedKey.ID, ra.internalRequest.Model)
+	if ra.isCompact && shouldMarkCompactUnsupported(fwdErr) {
+		balancer.MarkCompactUnsupported(ra.channel.ID, ra.internalRequest.Model)
+	}
 
 	written := ra.c.Writer.Written()
 	if written {
@@ -293,9 +325,81 @@ func parseRequest(inboundType inbound.InboundType, c *gin.Context) (*model.Inter
 	return internalRequest, inAdapter, nil
 }
 
+func shouldMarkCompactUnsupported(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	if !isCompactCapabilityStatus(msg) {
+		return false
+	}
+	if strings.Contains(msg, "model_not_found") {
+		return true
+	}
+	if strings.Contains(msg, "not support") || strings.Contains(msg, "not supported") || strings.Contains(msg, "unsupported") {
+		return true
+	}
+	if strings.Contains(msg, "/responses/compact") {
+		return true
+	}
+	if strings.Contains(msg, "response.compaction") {
+		return true
+	}
+	return false
+}
+
+var compactCapabilityStatuses = []string{
+	"upstream error: 400:",
+	"upstream error: 404:",
+	"upstream error: 405:",
+	"upstream error: 422:",
+	"upstream error: 503:",
+}
+
+func isCompactCapabilityStatus(msg string) bool {
+	return containsAny(msg, compactCapabilityStatuses...)
+}
+
+func containsAny(msg string, patterns ...string) bool {
+	for _, pattern := range patterns {
+		if strings.Contains(msg, pattern) {
+			return true
+		}
+	}
+	return false
+}
+
+func formatUpstreamErrorMessage(isCompact bool, requestModel, routedModel, endpointPath string, statusCode int, body []byte) string {
+	base := fmt.Sprintf("upstream error: %d: %s", statusCode, string(body))
+	if !isCompact {
+		return base
+	}
+
+	parts := []string{
+		fmt.Sprintf("request_model=%q", requestModel),
+		fmt.Sprintf("routed_model=%q", routedModel),
+		fmt.Sprintf("endpoint=%q", endpointPath),
+	}
+	bodyText := strings.ToLower(string(body))
+	if strings.Contains(bodyText, "-openai-compact") {
+		parts = append(parts, `note="upstream provider may internally map compact endpoint models to *-openai-compact aliases"`)
+	}
+	return fmt.Sprintf("%s [compact relay context: %s]", base, strings.Join(parts, ", "))
+}
+
 // forward 转发请求到上游服务
 func (ra *relayAttempt) forward() (int, error) {
 	ctx := ra.c.Request.Context()
+
+	originalMetadata := ra.internalRequest.Metadata
+	if ra.channel != nil &&
+		ra.inboundType == inbound.InboundTypeAnthropic &&
+		ra.channel.Type != outbound.OutboundTypeAnthropic {
+		ra.internalRequest.Metadata = nil
+	}
+	defer func() {
+		ra.internalRequest.Metadata = originalMetadata
+	}()
 
 	// 构建出站请求
 	outboundRequest, err := ra.outAdapter.TransformRequest(
@@ -325,18 +429,25 @@ func (ra *relayAttempt) forward() (int, error) {
 		if err != nil {
 			return 0, fmt.Errorf("failed to read response body: %w", err)
 		}
-		return 0, fmt.Errorf("upstream error: %d: %s", response.StatusCode, string(body))
+		return response.StatusCode, fmt.Errorf("%s", formatUpstreamErrorMessage(
+			ra.isCompact,
+			ra.requestModel,
+			ra.internalRequest.Model,
+			outboundRequest.URL.Path,
+			response.StatusCode,
+			body,
+		))
 	}
 
 	// 处理响应
 	if ra.internalRequest.Stream != nil && *ra.internalRequest.Stream {
 		if err := ra.handleStreamResponse(ctx, response); err != nil {
-			return 0, err
+			return response.StatusCode, err
 		}
 		return response.StatusCode, nil
 	}
 	if err := ra.handleResponse(ctx, response); err != nil {
-		return 0, err
+		return response.StatusCode, err
 	}
 	return response.StatusCode, nil
 }
@@ -360,7 +471,7 @@ func (ra *relayAttempt) copyHeaders(outboundRequest *http.Request) {
 
 // sendRequest 发送 HTTP 请求
 func (ra *relayAttempt) sendRequest(req *http.Request) (*http.Response, error) {
-	httpClient, err := helper.ChannelHttpClient(ra.channel)
+	httpClient, err := channelHTTPClient(ra.channel)
 	if err != nil {
 		log.Warnf("failed to get http client: %v", err)
 		return nil, err

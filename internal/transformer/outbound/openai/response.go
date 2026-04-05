@@ -21,6 +21,9 @@ type ResponseOutbound struct {
 	streamID    string
 	streamModel string
 	initialized bool
+
+	endpointPath  string
+	isPassthrough bool
 }
 
 func (o *ResponseOutbound) TransformRequest(ctx context.Context, request *model.InternalLLMRequest, baseUrl, key string) (*http.Request, error) {
@@ -51,7 +54,11 @@ func (o *ResponseOutbound) TransformRequest(ctx context.Context, request *model.
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse base url: %w", err)
 	}
-	parsedUrl.Path = parsedUrl.Path + "/responses"
+	endpointPath := o.endpointPath
+	if endpointPath == "" {
+		endpointPath = "/responses"
+	}
+	parsedUrl.Path = parsedUrl.Path + endpointPath
 	req.URL = parsedUrl
 	req.Method = http.MethodPost
 
@@ -86,13 +93,26 @@ func (o *ResponseOutbound) TransformResponse(ctx context.Context, response *http
 		return nil, fmt.Errorf("HTTP error %d: %s", response.StatusCode, string(body))
 	}
 
+	if o.isPassthrough {
+		return &model.InternalLLMResponse{
+			Object:      "response.compaction",
+			RawResponse: body,
+		}, nil
+	}
+
 	var resp ResponsesResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal responses api response: %w", err)
 	}
 
 	// Convert to internal response
-	return convertToLLMResponseFromResponses(&resp), nil
+	internalResp := convertToLLMResponseFromResponses(&resp)
+
+	if internalResp.IsEmpty() {
+		return nil, fmt.Errorf("response content is empty")
+	}
+
+	return internalResp, nil
 }
 
 func (o *ResponseOutbound) TransformStream(ctx context.Context, eventData []byte) (*model.InternalLLMResponse, error) {
@@ -253,22 +273,26 @@ func (o *ResponseOutbound) TransformStream(ctx context.Context, eventData []byte
 
 // ResponsesRequest represents the OpenAI Responses API request format.
 type ResponsesRequest struct {
-	Model             string                `json:"model"`
-	Instructions      string                `json:"instructions,omitempty"`
-	Input             ResponsesInput        `json:"input"`
-	Tools             []ResponsesTool       `json:"tools,omitempty"`
-	ToolChoice        *ResponsesToolChoice  `json:"tool_choice,omitempty"`
-	ParallelToolCalls *bool                 `json:"parallel_tool_calls,omitempty"`
-	Stream            *bool                 `json:"stream,omitempty"`
-	Text              *ResponsesTextOptions `json:"text,omitempty"`
-	Store             *bool                 `json:"store,omitempty"`
-	ServiceTier       *string               `json:"service_tier,omitempty"`
-	User              *string               `json:"user,omitempty"`
-	Metadata          map[string]string     `json:"metadata,omitempty"`
-	MaxOutputTokens   *int64                `json:"max_output_tokens,omitempty"`
-	Temperature       *float64              `json:"temperature,omitempty"`
-	TopP              *float64              `json:"top_p,omitempty"`
-	Reasoning         *ResponsesReasoning   `json:"reasoning,omitempty"`
+	Model              string                `json:"model"`
+	Instructions       string                `json:"instructions,omitempty"`
+	Input              ResponsesInput        `json:"input"`
+	PreviousResponseID string                `json:"previous_response_id,omitempty"`
+	PromptCacheKey     string                `json:"prompt_cache_key,omitempty"`
+	Tools              []ResponsesTool       `json:"tools,omitempty"`
+	ToolChoice         *ResponsesToolChoice  `json:"tool_choice,omitempty"`
+	ParallelToolCalls  *bool                 `json:"parallel_tool_calls,omitempty"`
+	Stream             *bool                 `json:"stream,omitempty"`
+	Text               *ResponsesTextOptions `json:"text,omitempty"`
+	Store              *bool                 `json:"store,omitempty"`
+	ServiceTier        *string               `json:"service_tier,omitempty"`
+	User               *string               `json:"user,omitempty"`
+	Metadata           map[string]string     `json:"metadata,omitempty"`
+	MaxOutputTokens    *int64                `json:"max_output_tokens,omitempty"`
+	Temperature        *float64              `json:"temperature,omitempty"`
+	TopP               *float64              `json:"top_p,omitempty"`
+	Reasoning          *ResponsesReasoning   `json:"reasoning,omitempty"`
+	Include            []string              `json:"include,omitempty"`
+	TopLogprobs        *int64                `json:"top_logprobs,omitempty"`
 }
 
 type ResponsesInput struct {
@@ -385,7 +409,8 @@ type ResponsesTextFormat struct {
 }
 
 type ResponsesReasoning struct {
-	Effort string `json:"effort,omitempty"`
+	Effort    string `json:"effort,omitempty"`
+	MaxTokens *int64 `json:"max_tokens,omitempty"`
 }
 
 // ResponsesResponse represents the OpenAI Responses API response format.
@@ -449,6 +474,12 @@ func ConvertToResponsesRequest(req *model.InternalLLMRequest) *ResponsesRequest 
 		Metadata:          req.Metadata,
 		MaxOutputTokens:   req.MaxCompletionTokens,
 		ParallelToolCalls: req.ParallelToolCalls,
+		Include:           append([]string(nil), req.Include...),
+		TopLogprobs:       req.TopLogprobs,
+	}
+	if req.TransformerMetadata != nil {
+		result.PreviousResponseID = req.TransformerMetadata["previous_response_id"]
+		result.PromptCacheKey = req.TransformerMetadata["prompt_cache_key"]
 	}
 
 	// Convert instructions from system messages
@@ -479,11 +510,19 @@ func ConvertToResponsesRequest(req *model.InternalLLMRequest) *ResponsesRequest 
 	// Convert reasoning
 	if req.ReasoningEffort != "" || req.ReasoningBudget != nil {
 		result.Reasoning = &ResponsesReasoning{
-			Effort: req.ReasoningEffort,
+			Effort:    req.ReasoningEffort,
+			MaxTokens: req.ReasoningBudget,
 		}
 	}
 
 	return result
+}
+
+func NewCompactResponseOutbound() *ResponseOutbound {
+	return &ResponseOutbound{
+		endpointPath:  "/responses/compact",
+		isPassthrough: true,
+	}
 }
 
 func convertInstructionsFromMessages(msgs []model.Message) string {

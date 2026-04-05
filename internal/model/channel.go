@@ -1,6 +1,7 @@
 package model
 
 import (
+	"sort"
 	"time"
 
 	"github.com/bestruirui/octopus/internal/transformer/outbound"
@@ -122,15 +123,20 @@ func (c *Channel) GetBaseUrl() string {
 }
 
 func (c *Channel) GetChannelKey() ChannelKey {
-	if c == nil || len(c.Keys) == 0 {
+	keys := c.GetChannelKeys()
+	if len(keys) == 0 {
 		return ChannelKey{}
+	}
+	return keys[0]
+}
+
+func (c *Channel) GetChannelKeys() []ChannelKey {
+	if c == nil || len(c.Keys) == 0 {
+		return nil
 	}
 
 	nowSec := time.Now().Unix()
-
-	best := ChannelKey{}
-	bestCost := 0.0
-	bestSet := false
+	available := make([]ChannelKey, 0, len(c.Keys))
 
 	for _, k := range c.Keys {
 		if !k.Enabled || k.ChannelKey == "" {
@@ -141,15 +147,18 @@ func (c *Channel) GetChannelKey() ChannelKey {
 				continue
 			}
 		}
-		if !bestSet || k.TotalCost < bestCost {
-			best = k
-			bestCost = k.TotalCost
-			bestSet = true
-		}
+		available = append(available, k)
 	}
 
-	if !bestSet {
-		return ChannelKey{}
+	if len(available) == 0 {
+		return nil
 	}
-	return best
+
+	sort.Slice(available, func(i, j int) bool {
+		if available[i].TotalCost == available[j].TotalCost {
+			return available[i].ID < available[j].ID
+		}
+		return available[i].TotalCost < available[j].TotalCost
+	})
+	return available
 }

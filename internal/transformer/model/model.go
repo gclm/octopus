@@ -321,7 +321,6 @@ func (r *InternalLLMRequest) fillMissingToolCallIDs() {
 	}
 }
 
-
 func (r *InternalLLMRequest) fillMissingToolCallIDsFromToolMessages() {
 	for msgIndex := 0; msgIndex < len(r.Messages); msgIndex++ {
 		msg := &r.Messages[msgIndex]
@@ -665,6 +664,9 @@ type InternalLLMResponse struct {
 
 	// Error is the error information, will present if request to llm service failed with status >= 400.
 	Error *ResponseError `json:"error,omitempty"`
+
+	// RawResponse stores the original upstream response body when passthrough is required.
+	RawResponse []byte `json:"-"`
 }
 
 func (r *InternalLLMResponse) ClearHelpFields() {
@@ -689,6 +691,64 @@ func (r *InternalLLMResponse) IsEmbeddingResponse() bool {
 // IsChatResponse returns true if this is a chat completion response.
 func (r *InternalLLMResponse) IsChatResponse() bool {
 	return len(r.Choices) > 0
+}
+
+func (r *InternalLLMResponse) IsEmpty() bool {
+	if r == nil {
+		return true
+	}
+
+	if len(r.EmbeddingData) > 0 {
+		return false
+	}
+
+	if len(r.Choices) == 0 {
+		return true
+	}
+
+	for _, choice := range r.Choices {
+		msg := choice.Message
+		if choice.Delta != nil {
+			msg = choice.Delta
+		}
+
+		if msg == nil {
+			if choice.FinishReason != nil && *choice.FinishReason == "content_filter" {
+				return false
+			}
+			continue
+		}
+
+		if len(msg.ToolCalls) > 0 {
+			return false
+		}
+
+		if msg.Content.Content != nil && *msg.Content.Content != "" {
+			return false
+		}
+
+		if len(msg.Content.MultipleContent) > 0 {
+			return false
+		}
+
+		if msg.ReasoningContent != nil && *msg.ReasoningContent != "" {
+			return false
+		}
+
+		if msg.Reasoning != nil && *msg.Reasoning != "" {
+			return false
+		}
+
+		if msg.Refusal != "" {
+			return false
+		}
+
+		if choice.FinishReason != nil && *choice.FinishReason == "content_filter" {
+			return false
+		}
+	}
+
+	return true
 }
 
 // Choice represents a choice in the response.

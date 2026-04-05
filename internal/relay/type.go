@@ -8,6 +8,7 @@ import (
 	"github.com/bestruirui/octopus/internal/conf"
 	dbmodel "github.com/bestruirui/octopus/internal/model"
 	"github.com/bestruirui/octopus/internal/relay/balancer"
+	"github.com/bestruirui/octopus/internal/transformer/inbound"
 	"github.com/bestruirui/octopus/internal/transformer/model"
 	"github.com/gin-gonic/gin"
 )
@@ -25,6 +26,11 @@ func init() {
 		}
 	}
 }
+
+const (
+	ResponsesEndpointContextKey = "responses_endpoint"
+	ResponsesEndpointCompact    = "compact"
+)
 
 // hopByHopHeaders 定义不应转发的 HTTP 头
 var hopByHopHeaders = map[string]bool{
@@ -61,7 +67,8 @@ type relayRequest struct {
 	apiKeyID        int
 	requestModel    string
 	iter            *balancer.Iterator
-	inboundType      string
+	inboundType     inbound.InboundType
+	isCompact       bool
 }
 
 // relayAttempt 尝试级上下文

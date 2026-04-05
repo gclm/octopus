@@ -10,6 +10,11 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+const (
+	responsesEndpointContextKey = relay.ResponsesEndpointContextKey
+	responsesEndpointCompact    = relay.ResponsesEndpointCompact
+)
+
 func init() {
 	router.NewGroupRouter("/v1").
 		Use(middleware.APIKeyAuth()).
@@ -21,6 +26,10 @@ func init() {
 		AddRoute(
 			router.NewRoute("/responses", http.MethodPost).
 				Handle(response),
+		).
+		AddRoute(
+			router.NewRoute("/responses/compact", http.MethodPost).
+				Handle(responseCompact),
 		).
 		AddRoute(
 			router.NewRoute("/messages", http.MethodPost).
@@ -36,6 +45,10 @@ func chat(c *gin.Context) {
 	relay.Handler(inbound.InboundTypeOpenAIChat, c)
 }
 func response(c *gin.Context) {
+	relay.Handler(inbound.InboundTypeOpenAIResponse, c)
+}
+func responseCompact(c *gin.Context) {
+	c.Set(responsesEndpointContextKey, responsesEndpointCompact)
 	relay.Handler(inbound.InboundTypeOpenAIResponse, c)
 }
 func message(c *gin.Context) {

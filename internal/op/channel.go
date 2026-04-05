@@ -112,28 +112,24 @@ func ChannelKeySaveDB(ctx context.Context) error {
 }
 
 func ChannelSelectKey(channel *model.Channel, mode model.GroupMode, modelName string) model.ChannelKey {
-	if channel == nil {
+	keys := ChannelSelectKeys(channel, mode, modelName)
+	if len(keys) == 0 {
 		return model.ChannelKey{}
+	}
+	return keys[0]
+}
+
+func ChannelSelectKeys(channel *model.Channel, mode model.GroupMode, modelName string) []model.ChannelKey {
+	if channel == nil {
+		return nil
 	}
 	if mode != model.GroupModeScored {
-		return channel.GetChannelKey()
+		return channel.GetChannelKeys()
 	}
 
-	nowSec := time.Now().Unix()
-	available := make([]model.ChannelKey, 0, len(channel.Keys))
-	for _, k := range channel.Keys {
-		if !k.Enabled || k.ChannelKey == "" {
-			continue
-		}
-		if k.StatusCode == 429 && k.LastUseTimeStamp > 0 {
-			if nowSec-k.LastUseTimeStamp < int64(5*time.Minute/time.Second) {
-				continue
-			}
-		}
-		available = append(available, k)
-	}
+	available := channel.GetChannelKeys()
 	if len(available) == 0 {
-		return model.ChannelKey{}
+		return nil
 	}
 
 	sort.Slice(available, func(i, j int) bool {
@@ -147,7 +143,7 @@ func ChannelSelectKey(channel *model.Channel, mode model.GroupMode, modelName st
 		}
 		return left > right
 	})
-	return available[0]
+	return available
 }
 
 func scoreChannelKey(channel *model.Channel, key model.ChannelKey, modelName string) float64 {

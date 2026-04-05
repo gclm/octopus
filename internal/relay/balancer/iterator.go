@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/bestruirui/octopus/internal/model"
+	tmodel "github.com/bestruirui/octopus/internal/transformer/model"
 )
 
 // Iterator 统一的负载均衡迭代器
@@ -22,9 +23,12 @@ type Iterator struct {
 
 // NewIterator 创建负载均衡迭代器
 // 自动处理：策略排序 + 粘性通道提前
-func NewIterator(group model.Group, apiKeyID int, requestModel string) *Iterator {
+func NewIterator(group model.Group, apiKeyID int, requestModel string, request *tmodel.InternalLLMRequest) *Iterator {
 	b := GetBalancer(group.Mode)
 	candidates := b.Candidates(group.Items)
+	if group.Mode == model.GroupModeScored {
+		candidates = applyPrefixAffinityOrdering(candidates, request, scoreGroupItem)
+	}
 
 	stickyIdx := -1
 	if group.SessionKeepTime > 0 {
