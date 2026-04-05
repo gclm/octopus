@@ -8,8 +8,8 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/bestruirui/octopus/internal/model"
-	tmodel "github.com/bestruirui/octopus/internal/transformer/model"
+	"github.com/gclm/octopus/internal/model"
+	tmodel "github.com/gclm/octopus/internal/transformer/model"
 )
 
 const (

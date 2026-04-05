@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/bestruirui/octopus/internal/db"
-	"github.com/bestruirui/octopus/internal/model"
+	"github.com/gclm/octopus/internal/db"
+	"github.com/gclm/octopus/internal/model"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )

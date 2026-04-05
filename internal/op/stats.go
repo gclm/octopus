@@ -10,11 +10,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bestruirui/octopus/internal/db"
-	"github.com/bestruirui/octopus/internal/model"
-	"github.com/bestruirui/octopus/internal/utils/cache"
-	"github.com/bestruirui/octopus/internal/utils/log"
-	"github.com/bestruirui/octopus/internal/utils/xstrings"
+	"github.com/gclm/octopus/internal/db"
+	"github.com/gclm/octopus/internal/model"
+	"github.com/gclm/octopus/internal/utils/cache"
+	"github.com/gclm/octopus/internal/utils/log"
+	"github.com/gclm/octopus/internal/utils/xstrings"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -281,8 +281,8 @@ func StatsModelUpdate(stats model.StatsModel) error {
 	modelCache, ok := statsModelCache.Get(stats.ID)
 	if !ok {
 		modelCache = model.StatsModel{
-			ID: stats.ID,
-			Name: stats.Name,
+			ID:        stats.ID,
+			Name:      stats.Name,
 			ChannelID: stats.ChannelID,
 		}
 	}

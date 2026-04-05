@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/bestruirui/octopus/internal/model"
-	tmodel "github.com/bestruirui/octopus/internal/transformer/model"
+	"github.com/gclm/octopus/internal/model"
+	tmodel "github.com/gclm/octopus/internal/transformer/model"
 )
 
 // Iterator 统一的负载均衡迭代器

@@ -23,18 +23,18 @@ jobs:
         env:
           GITHUB_TOKEN: ${{secrets.ACTION_TOKEN}}
 
-      - name: Merge dev to master branch
+      - name: Merge dev to main branch
         run: |
           git config --global user.name 'GitHub Actions'
           git config --global user.email 'github-actions@github.com'
-          if ! git show-ref --verify --quiet refs/heads/master; then
-            git checkout -b master
+          if ! git show-ref --verify --quiet refs/heads/main; then
+            git checkout -b main
           else
-            git checkout master
+            git checkout main
           fi
           git fetch origin dev
           git merge origin/dev
           git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}
-          git push origin master --force
+          git push origin main --force
         env:
           GITHUB_TOKEN: ${{secrets.ACTION_TOKEN}}

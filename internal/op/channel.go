@@ -7,11 +7,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bestruirui/octopus/internal/db"
-	"github.com/bestruirui/octopus/internal/model"
-	"github.com/bestruirui/octopus/internal/utils/cache"
-	"github.com/bestruirui/octopus/internal/utils/log"
-	"github.com/bestruirui/octopus/internal/utils/xstrings"
+	"github.com/gclm/octopus/internal/db"
+	"github.com/gclm/octopus/internal/model"
+	"github.com/gclm/octopus/internal/utils/cache"
+	"github.com/gclm/octopus/internal/utils/log"
+	"github.com/gclm/octopus/internal/utils/xstrings"
 )
 
 var channelCache = cache.New[int, model.Channel](16)

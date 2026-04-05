@@ -10,11 +10,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bestruirui/octopus/internal/db"
-	dbmodel "github.com/bestruirui/octopus/internal/model"
-	"github.com/bestruirui/octopus/internal/op"
-	"github.com/bestruirui/octopus/internal/transformer/inbound"
-	"github.com/bestruirui/octopus/internal/transformer/outbound"
+	"github.com/gclm/octopus/internal/db"
+	dbmodel "github.com/gclm/octopus/internal/model"
+	"github.com/gclm/octopus/internal/op"
+	"github.com/gclm/octopus/internal/transformer/inbound"
+	"github.com/gclm/octopus/internal/transformer/outbound"
 	"github.com/gin-gonic/gin"
 )
 

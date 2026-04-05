@@ -8,8 +8,8 @@ import (
 	"runtime"
 	"syscall"
 
-	"github.com/bestruirui/octopus/internal/utils/log"
-	"github.com/bestruirui/octopus/internal/utils/shutdown"
+	"github.com/gclm/octopus/internal/utils/log"
+	"github.com/gclm/octopus/internal/utils/shutdown"
 )
 
 func UpdateCore() error {
@@ -21,7 +21,7 @@ func UpdateCore() error {
 		return err
 	}
 
-	downloadUrl := updateUrl + "/" + filename
+	downloadUrl := latestReleaseDownloadBaseURL() + "/" + filename
 	log.Infof("download url: %s", downloadUrl)
 	data, err := doRequestWithFallback(downloadUrl)
 	if err != nil {

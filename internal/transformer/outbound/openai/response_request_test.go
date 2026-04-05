@@ -3,7 +3,7 @@ package openai
 import (
 	"testing"
 
-	"github.com/bestruirui/octopus/internal/transformer/model"
+	"github.com/gclm/octopus/internal/transformer/model"
 )
 
 func TestConvertToResponsesRequest_PreservesExtendedOptions(t *testing.T) {

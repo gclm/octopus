@@ -1,6 +1,6 @@
 services:
   octopus:
-    image: ${OCTOPUS_IMAGE:-ghcr.io/zbsdsb/octopus:dev}
+    image: ${OCTOPUS_IMAGE:-ghcr.io/gclm/octopus:dev}
     ports:
       - "${OCTOPUS_PORT:-8080}:8080"
     volumes:

@@ -4,8 +4,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/bestruirui/octopus/internal/model"
-	tmodel "github.com/bestruirui/octopus/internal/transformer/model"
+	"github.com/gclm/octopus/internal/model"
+	tmodel "github.com/gclm/octopus/internal/transformer/model"
 )
 
 func TestRequestAffinityKey_NormalizesSimilarPrefixes(t *testing.T) {

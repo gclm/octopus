@@ -4,7 +4,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/bestruirui/octopus/internal/transformer/outbound"
+	"github.com/gclm/octopus/internal/transformer/outbound"
 )
 
 type AutoGroupType int
