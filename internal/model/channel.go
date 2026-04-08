@@ -121,7 +121,12 @@ func (c *Channel) GetBaseUrl() string {
 	return bestURL
 }
 
-func (c *Channel) GetChannelKey() ChannelKey {
+// KeyFilter 用于过滤 key 的函数类型
+type KeyFilter func(key ChannelKey) bool
+
+// GetChannelKey 获取一个可用的 channel key
+// filters 是可选的过滤器列表，返回 false 表示跳过该 key
+func (c *Channel) GetChannelKey(filters ...KeyFilter) ChannelKey {
 	if c == nil || len(c.Keys) == 0 {
 		return ChannelKey{}
 	}
@@ -136,10 +141,22 @@ func (c *Channel) GetChannelKey() ChannelKey {
 		if !k.Enabled || k.ChannelKey == "" {
 			continue
 		}
+		// 429 冷却检查
 		if k.StatusCode == 429 && k.LastUseTimeStamp > 0 {
 			if nowSec-k.LastUseTimeStamp < int64(5*time.Minute/time.Second) {
 				continue
 			}
+		}
+		// 应用自定义过滤器
+		skip := false
+		for _, filter := range filters {
+			if !filter(k) {
+				skip = true
+				break
+			}
+		}
+		if skip {
+			continue
 		}
 		if !bestSet || k.TotalCost < bestCost {
 			best = k
