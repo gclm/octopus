@@ -315,7 +315,7 @@ export function GroupCard({ group }: { group: Group }) {
 
             {/* Mode: quick switch (no need to enter Edit) */}
             <div className="flex gap-1 mb-3">
-                {([GroupMode.RoundRobin, GroupMode.Random, GroupMode.Failover, GroupMode.Weighted] as const).map((m) => (
+                {([GroupMode.RoundRobin, GroupMode.Failover, GroupMode.Weighted, GroupMode.HealthBased] as const).map((m) => (
                     <button
                         key={m}
                         type="button"
@@ -347,7 +347,7 @@ export function GroupCard({ group }: { group: Group }) {
                     onDrop={handleDropReorder}
                     onDragFinish={handleDragFinish}
                     autoScrollOnAdd={false}
-                    showWeight={group.mode === GroupMode.Weighted}
+                    showWeight={group.mode === GroupMode.Weighted || group.mode === GroupMode.HealthBased}
                     layoutScope={`card-${group.id ?? 'unknown'}`}
                 />
             </section>

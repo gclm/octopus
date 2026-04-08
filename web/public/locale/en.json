@@ -384,9 +384,9 @@
         },
         "mode": {
             "roundRobin": "Round Robin",
-            "random": "Random",
             "failover": "Failover",
-            "weighted": "Weighted"
+            "weighted": "Weighted",
+            "healthBased": "Health Based"
         },
         "empty": "No groups yet, click the button above to create one"
     },

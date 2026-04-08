@@ -207,26 +207,28 @@ func (ra *relayAttempt) attempt() attemptResult {
 			RequestSuccess: 1,
 		})
 
-		// 熔断器：记录成功
-		balancer.RecordSuccess(ra.channel.ID, ra.usedKey.ID, ra.internalRequest.Model)
-		// 会话保持：更新粘性记录
-		balancer.SetSticky(ra.apiKeyID, ra.requestModel, ra.channel.ID, ra.usedKey.ID)
+			// 熔断器：记录成功
+            balancer.RecordSuccess(ra.channel.ID, ra.usedKey.ID, ra.internalRequest.Model)
+            // 健康分：记录成功
+            balancer.RecordHealthSuccess(ra.channel.ID, ra.internalRequest.Model, span.Duration().Milliseconds())
 
-		return attemptResult{Success: true}
-	}
+            return attemptResult{Success: true}
+        }
 
-	// ====== 失败 ======
-	op.ChannelKeyUpdate(ra.usedKey)
-	span.End(dbmodel.AttemptFailed, statusCode, fwdErr.Error())
+        // ====== 失败 ======
+        op.ChannelKeyUpdate(ra.usedKey)
+        span.End(dbmodel.AttemptFailed, statusCode, fwdErr.Error())
 
-	// Channel 维度统计
-	op.StatsChannelUpdate(ra.channel.ID, dbmodel.StatsMetrics{
-		WaitTime:      span.Duration().Milliseconds(),
-		RequestFailed: 1,
-	})
+        // Channel 维度统计
+        op.StatsChannelUpdate(ra.channel.ID, dbmodel.StatsMetrics{
+                WaitTime:      span.Duration().Milliseconds(),
+                RequestFailed: 1,
+        })
 
-	// 熔断器：记录失败
-	balancer.RecordFailure(ra.channel.ID, ra.usedKey.ID, ra.internalRequest.Model)
+        // 熔断器：记录失败
+        balancer.RecordFailure(ra.channel.ID, ra.usedKey.ID, ra.internalRequest.Model)
+        // 健康分:记录失败
+        balancer.RecordHealthFailure(ra.channel.ID, ra.internalRequest.Model)
 
 	written := ra.c.Writer.Written()
 	if written {

@@ -22,12 +22,12 @@ func GetBalancer(mode model.GroupMode) Balancer {
 	switch mode {
 	case model.GroupModeRoundRobin:
 		return &RoundRobin{}
-	case model.GroupModeRandom:
-		return &Random{}
 	case model.GroupModeFailover:
 		return &Failover{}
 	case model.GroupModeWeighted:
 		return &Weighted{}
+	case model.GroupModeHealthBased:
+		return &HealthBased{}
 	default:
 		return &RoundRobin{}
 	}
@@ -46,22 +46,6 @@ func (b *RoundRobin) Candidates(items []model.GroupItem) []model.GroupItem {
 	for i := 0; i < n; i++ {
 		result[i] = items[(idx+i)%n]
 	}
-	return result
-}
-
-// Random 随机：随机打乱所有 items
-type Random struct{}
-
-func (b *Random) Candidates(items []model.GroupItem) []model.GroupItem {
-	n := len(items)
-	if n == 0 {
-		return nil
-	}
-	result := make([]model.GroupItem, n)
-	copy(result, items)
-	rand.Shuffle(n, func(i, j int) {
-		result[i], result[j] = result[j], result[i]
-	})
 	return result
 }
 
@@ -86,8 +70,8 @@ func (b *Weighted) Candidates(items []model.GroupItem) []model.GroupItem {
 
 	// 构建加权随机排序
 	type weightedItem struct {
-		item   model.GroupItem
-		score  float64
+		item  model.GroupItem
+		score float64
 	}
 
 	totalWeight := 0
@@ -121,6 +105,72 @@ func (b *Weighted) Candidates(items []model.GroupItem) []model.GroupItem {
 	for i := range scored {
 		result[i] = scored[i].item
 	}
+	return result
+}
+
+// HealthBased 健康分优先：按运行时健康分排序
+type HealthBased struct{}
+
+func (b *HealthBased) Candidates(items []model.GroupItem) []model.GroupItem {
+	n := len(items)
+	if n == 0 {
+		return nil
+	}
+
+	type scoredItem struct {
+		item    model.GroupItem
+		score   int
+		latency int64
+	}
+
+	// 分层：健康池 / 观察池 / 隔离池 / 垃圾池
+	var good, warning, bad, garbage []scoredItem
+
+	for _, item := range items {
+		entry := getHealthEntry(item.ChannelID, item.ModelName)
+		score := entry.getScore()
+		latency := entry.getAvgLatency()
+
+		si := scoredItem{item: item, score: score, latency: latency}
+
+		switch {
+		case score >= healthScoreGood:
+			good = append(good, si)
+		case score >= healthScoreWarning:
+			warning = append(warning, si)
+		case score >= healthScoreBad:
+			bad = append(bad, si)
+		default:
+			garbage = append(garbage, si)
+		}
+	}
+
+	// 每组内按延迟排序
+	sortByLatency := func(items []scoredItem) {
+		sort.Slice(items, func(i, j int) bool {
+			return items[i].latency < items[j].latency
+		})
+	}
+	sortByLatency(good)
+	sortByLatency(warning)
+	sortByLatency(bad)
+	sortByLatency(garbage)
+
+	// 合并：健康池 → 观察池 → 隔离池 → 垃圾池
+	result := make([]model.GroupItem, 0, n)
+	for _, si := range good {
+		result = append(result, si.item)
+	}
+	for _, si := range warning {
+		result = append(result, si.item)
+	}
+	for _, si := range bad {
+		result = append(result, si.item)
+	}
+	for _, si := range garbage {
+		result = append(result, si.item)
+	}
+
 	return result
 }
 
