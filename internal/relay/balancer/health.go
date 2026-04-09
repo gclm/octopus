@@ -132,6 +132,36 @@ func (e *healthEntry) decayLocked(now time.Time) {
 	}
 }
 
+// HealthInfo 单个渠道+模型的健康信息
+type HealthInfo struct {
+	Score        int   `json:"score"`
+	AvgLatencyMs int64 `json:"avg_latency_ms"`
+	SuccessCount int64 `json:"success_count"`
+	FailureCount int64 `json:"failure_count"`
+}
+
+// GetHealthInfos 批量获取健康信息
+func GetHealthInfos(keys []struct {
+	ChannelID int
+	ModelName string
+}) map[string]HealthInfo {
+	result := make(map[string]HealthInfo, len(keys))
+	for _, k := range keys {
+		entry := getHealthEntry(k.ChannelID, k.ModelName)
+		entry.mu.Lock()
+		entry.decayLocked(time.Now())
+		info := HealthInfo{
+			Score:        entry.Score,
+			AvgLatencyMs: entry.AvgLatencyMs,
+			SuccessCount: entry.SuccessCount,
+			FailureCount: entry.FailureCount,
+		}
+		entry.mu.Unlock()
+		result[healthKey(k.ChannelID, k.ModelName)] = info
+	}
+	return result
+}
+
 // resetHealthStatsForTest clears all health stats; test-only helper.
 func resetHealthStatsForTest() {
 	healthStats = sync.Map{}

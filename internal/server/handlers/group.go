@@ -6,6 +6,7 @@ import (
 
 	"github.com/bestruirui/octopus/internal/model"
 	"github.com/bestruirui/octopus/internal/op"
+	"github.com/bestruirui/octopus/internal/relay/balancer"
 	"github.com/bestruirui/octopus/internal/server/middleware"
 	"github.com/bestruirui/octopus/internal/server/resp"
 	"github.com/bestruirui/octopus/internal/server/router"
@@ -32,6 +33,10 @@ func init() {
 		AddRoute(
 			router.NewRoute("/delete/:id", http.MethodDelete).
 				Handle(deleteGroup),
+		).
+		AddRoute(
+			router.NewRoute("/health", http.MethodPost).
+				Handle(getGroupHealth),
 		)
 	// AddRoute(
 	// 	router.NewRoute("/auto-add-item", http.MethodPost).
@@ -101,6 +106,29 @@ func deleteGroup(c *gin.Context) {
 		return
 	}
 	resp.Success(c, "group deleted successfully")
+}
+
+func getGroupHealth(c *gin.Context) {
+	var req struct {
+		Items []struct {
+			ChannelID int    `json:"channel_id"`
+			ModelName string `json:"model_name"`
+		} `json:"items"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		resp.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	keys := make([]struct {
+		ChannelID int
+		ModelName string
+	}, len(req.Items))
+	for i, item := range req.Items {
+		keys[i].ChannelID = item.ChannelID
+		keys[i].ModelName = item.ModelName
+	}
+	result := balancer.GetHealthInfos(keys)
+	resp.Success(c, result)
 }
 
 // func autoAddGroupItem(c *gin.Context) {

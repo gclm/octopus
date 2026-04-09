@@ -412,6 +412,13 @@
             "weighted": "Weighted",
             "healthBased": "Health Based"
         },
+        "health": {
+            "good": "Healthy",
+            "warning": "Watching",
+            "bad": "Isolated",
+            "garbage": "Unusable",
+            "unknown": "Unknown"
+        },
         "empty": "No groups yet, click the button above to create one"
     },
     "model": {

@@ -15,11 +15,53 @@ import { getModelIcon } from '@/lib/model-icons';
 import type { LLMChannel } from '@/api/endpoints/model';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/animate-ui/components/animate/tooltip';
 import { useTranslations } from 'next-intl';
+import type { HealthInfo } from '@/api/endpoints/group';
 
 export interface SelectedMember extends LLMChannel {
     id: string;
     item_id?: number;
     weight?: number;
+}
+
+type HealthLevel = 'good' | 'warning' | 'bad' | 'garbage' | 'unknown';
+
+function getHealthLevel(score: number): HealthLevel {
+    if (score >= 10) return 'good';
+    if (score >= -20) return 'warning';
+    if (score >= -50) return 'bad';
+    return 'garbage';
+}
+
+const healthLevelColors: Record<HealthLevel, string> = {
+    good: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
+    warning: 'bg-amber-500/15 text-amber-600 dark:text-amber-400',
+    bad: 'bg-orange-500/15 text-orange-600 dark:text-orange-400',
+    garbage: 'bg-red-500/15 text-red-600 dark:text-red-400',
+    unknown: 'bg-muted text-muted-foreground',
+};
+
+function HealthBadge({ health }: { health?: HealthInfo }) {
+    const t = useTranslations('group');
+    if (!health) {
+        return (
+            <span className={cn('shrink-0 px-1.5 py-0.5 text-[10px] font-medium rounded-md', healthLevelColors.unknown)}>
+                {t('health.unknown')}
+            </span>
+        );
+    }
+    const level = getHealthLevel(health.score);
+    return (
+        <Tooltip>
+            <TooltipTrigger asChild>
+                <span className={cn('shrink-0 px-1.5 py-0.5 text-[10px] font-medium rounded-md cursor-default', healthLevelColors[level])}>
+                    {t(`health.${level}`)} {health.score}
+                </span>
+            </TooltipTrigger>
+            <TooltipContent>
+                {health.success_count}✓ {health.failure_count}✗ · {health.avg_latency_ms}ms
+            </TooltipContent>
+        </Tooltip>
+    );
 }
 
 function reorderList<T>(list: T[], startIndex: number, endIndex: number): T[] {
@@ -43,6 +85,8 @@ function MemberItem({
     isRemoving,
     index,
     showWeight = false,
+    showHealth = false,
+    healthInfo,
     showConfirmDelete = true,
     layoutScope,
     dnd,
@@ -53,6 +97,8 @@ function MemberItem({
     isRemoving?: boolean;
     index: number;
     showWeight?: boolean;
+    showHealth?: boolean;
+    healthInfo?: HealthInfo;
     showConfirmDelete?: boolean;
     layoutScope?: string;
     dnd: MemberItemDnd;
@@ -133,6 +179,8 @@ function MemberItem({
                     />
                 )}
 
+                {showHealth && <HealthBadge health={healthInfo} />}
+
                 {(!showConfirmDelete || !confirmDelete) && (
                     <motion.button
                         layoutId={`delete-btn-member-${layoutScope ?? 'default'}-${member.id}`}
@@ -200,6 +248,8 @@ export interface MemberListProps {
     onDragFinish?: () => void;
     removingIds?: Set<string>;
     showWeight?: boolean;
+    showHealth?: boolean;
+    healthMap?: Record<string, HealthInfo>;
     /**
      * When true, show a confirmation overlay before removing an item.
      * When false, clicking the delete button removes the item immediately.
@@ -220,6 +270,8 @@ export function MemberList({
     onDragFinish,
     removingIds = new Set(),
     showWeight = false,
+    showHealth = false,
+    healthMap,
     showConfirmDelete = true,
     layoutScope: externalLayoutScope,
 }: MemberListProps) {
@@ -323,6 +375,8 @@ export function MemberList({
                                                 isRemoving={removingIds.has(member.id)}
                                                 index={index}
                                                 showWeight={showWeight}
+                                                showHealth={showHealth}
+                                                healthInfo={healthMap?.[`${member.channel_id}:${member.name}`]}
                                                 showConfirmDelete={showConfirmDelete}
                                                 layoutScope={layoutScope}
                                                 dnd={{

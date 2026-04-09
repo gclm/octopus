@@ -180,6 +180,30 @@ export function useDeleteGroup() {
 }
 
 /**
+ * 单个渠道+模型的健康信息
+ */
+export interface HealthInfo {
+    score: number;
+    avg_latency_ms: number;
+    success_count: number;
+    failure_count: number;
+}
+
+/**
+ * 批量查询健康分 Hook（仅用于 HealthBased 模式的分组）
+ */
+export function useGroupHealth(items?: { channel_id: number; model_name: string }[]) {
+    return useQuery({
+        queryKey: ['group', 'health', items],
+        queryFn: async () => {
+            return apiClient.post<Record<string, HealthInfo>>('/api/v1/group/health', { items });
+        },
+        enabled: !!items && items.length > 0,
+        refetchInterval: 15000,
+    });
+}
+
+/**
  * 自动添加分组 item Hook
  *
  * 后端路由: POST /api/v1/group/auto-add-item

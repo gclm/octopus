@@ -412,6 +412,13 @@
             "weighted": "加权分配",
             "healthBased": "健康优先"
         },
+        "health": {
+            "good": "健康",
+            "warning": "观察",
+            "bad": "隔离",
+            "garbage": "不可用",
+            "unknown": "未知"
+        },
         "empty": "暂无分组，点击左上角按钮创建"
     },
     "model": {

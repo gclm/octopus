@@ -476,7 +476,7 @@ export function GroupEditor({
                                 onRemove={handleRemoveMember}
                                 onWeightChange={handleWeightChange}
                                 removingIds={removingIds}
-                                showWeight={mode === 4 || mode === 5}
+                                showWeight={mode === 4}
                                 onClear={handleClearMembers}
                             />
                         </div>

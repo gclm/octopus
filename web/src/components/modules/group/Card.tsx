@@ -3,7 +3,7 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { Trash2, X, Pencil } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { type Group, useDeleteGroup, useUpdateGroup } from '@/api/endpoints/group';
+import { type Group, useDeleteGroup, useUpdateGroup, useGroupHealth } from '@/api/endpoints/group';
 import { useModelChannelList } from '@/api/endpoints/model';
 import { useTranslations } from 'next-intl';
 import { cn } from '@/lib/utils';
@@ -79,6 +79,12 @@ export function GroupCard({ group }: { group: Group }) {
     const isDragging = useRef(false);
     const weightTimerRef = useRef<NodeJS.Timeout | null>(null);
     const membersRef = useRef<SelectedMember[]>([]);
+
+    const isHealthBased = group.mode === GroupMode.HealthBased;
+    const healthItems = useMemo(() =>
+        (group.items ?? []).map((it) => ({ channel_id: it.channel_id, model_name: it.model_name })),
+        [group.items]);
+    const { data: healthMap } = useGroupHealth(isHealthBased ? healthItems : undefined);
 
     const channelNameByKey = useMemo(() => buildChannelNameByModelKey(modelChannels), [modelChannels]);
     const enabledByKey = useMemo(() => {
@@ -347,7 +353,9 @@ export function GroupCard({ group }: { group: Group }) {
                     onDrop={handleDropReorder}
                     onDragFinish={handleDragFinish}
                     autoScrollOnAdd={false}
-                    showWeight={group.mode === GroupMode.Weighted || group.mode === GroupMode.HealthBased}
+                    showWeight={group.mode === GroupMode.Weighted}
+                    showHealth={isHealthBased}
+                    healthMap={healthMap}
                     layoutScope={`card-${group.id ?? 'unknown'}`}
                 />
             </section>
