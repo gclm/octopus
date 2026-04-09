@@ -124,7 +124,7 @@ export function StatsChart() {
 
     return (
         <div className="rounded-3xl bg-card border-card-border border pt-4 pb-0 text-card-foreground custom-shadow">
-            <div className="px-4 pb-2 space-y-2">
+            <div className="px-4 pb-2 space-y-2 relative z-10">
                 <div className="flex justify-between items-center">
                     <h3 className="font-semibold text-base">{t('title')}</h3>
                     <Tabs value={chartMetricType} onValueChange={(value) => setChartMetricType(value as ChartMetricType)}>

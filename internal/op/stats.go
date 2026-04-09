@@ -556,6 +556,29 @@ func StatsGetDaily(ctx context.Context) ([]model.StatsDaily, error) {
 	if result.Error != nil {
 		return nil, result.Error
 	}
+
+	// Merge today's in-memory cache into the result
+	statsDailyCacheLock.RLock()
+	todayCache := statsDailyCache
+	statsDailyCacheLock.RUnlock()
+
+	if todayCache.Date != "" {
+		today := time.Now().Format("20060102")
+		if todayCache.Date == today {
+			found := false
+			for i, d := range statsDaily {
+				if d.Date == today {
+					statsDaily[i] = todayCache
+					found = true
+					break
+				}
+			}
+			if !found {
+				statsDaily = append(statsDaily, todayCache)
+			}
+		}
+	}
+
 	return statsDaily, nil
 }
 
