@@ -95,7 +95,15 @@ func StatsSaveDB(ctx context.Context) error {
 	statsAPIKeyCacheNeedUpdate = make(map[int]struct{})
 	statsAPIKeyCacheNeedUpdateLock.Unlock()
 
-	return persistStatsSnapshots(ctx, totalSnap, dailySnap, hourlyAll, channelIDs, modelIDs, apiKeyIDs)
+	statsModelDailyCacheNeedUpdateLock.Lock()
+	modelDailyKeys := make([]string, 0, len(statsModelDailyCacheNeedUpdate))
+	for key := range statsModelDailyCacheNeedUpdate {
+		modelDailyKeys = append(modelDailyKeys, key)
+	}
+	statsModelDailyCacheNeedUpdate = make(map[string]struct{})
+	statsModelDailyCacheNeedUpdateLock.Unlock()
+
+	return persistStatsSnapshots(ctx, totalSnap, dailySnap, hourlyAll, channelIDs, modelIDs, apiKeyIDs, modelDailyKeys)
 }
 
 func persistStatsSnapshots(
@@ -106,6 +114,7 @@ func persistStatsSnapshots(
 	channelIDs []int,
 	modelIDs []int,
 	apiKeyIDs []int,
+	modelDailyKeys []string,
 ) error {
 	dbConn := db.GetDB().WithContext(ctx)
 
@@ -162,6 +171,19 @@ func persistStatsSnapshots(
 		}
 	}
 
+	for _, key := range modelDailyKeys {
+		md, ok := statsModelDailyCache.Get(key)
+		if !ok {
+			continue
+		}
+		if result := dbConn.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "date"}, {Name: "name"}},
+			UpdateAll: true,
+		}).Create(&md); result.Error != nil {
+			return result.Error
+		}
+	}
+
 	return nil
 }
 
@@ -201,7 +223,15 @@ func statsSaveDBWithDailyOverride(ctx context.Context, dailyOverride model.Stats
 	statsAPIKeyCacheNeedUpdate = make(map[int]struct{})
 	statsAPIKeyCacheNeedUpdateLock.Unlock()
 
-	return persistStatsSnapshots(ctx, totalSnap, dailyOverride, hourlyAll, channelIDs, modelIDs, apiKeyIDs)
+	statsModelDailyCacheNeedUpdateLock.Lock()
+	modelDailyKeys := make([]string, 0, len(statsModelDailyCacheNeedUpdate))
+	for key := range statsModelDailyCacheNeedUpdate {
+		modelDailyKeys = append(modelDailyKeys, key)
+	}
+	statsModelDailyCacheNeedUpdate = make(map[string]struct{})
+	statsModelDailyCacheNeedUpdateLock.Unlock()
+
+	return persistStatsSnapshots(ctx, totalSnap, dailyOverride, hourlyAll, channelIDs, modelIDs, apiKeyIDs, modelDailyKeys)
 }
 
 func StatsDailyUpdate(ctx context.Context, metrics model.StatsMetrics) error {

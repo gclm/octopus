@@ -19,7 +19,7 @@ export function Home() {
     const setActiveView = useHomeViewStore((state) => state.setActiveView);
 
     return (
-        <PageWrapper className="h-full min-h-0 overflow-y-auto overscroll-contain space-y-4 pb-24 md:pb-4 rounded-t-3xl">
+        <PageWrapper className="h-full min-h-0 overflow-y-auto overscroll-contain space-y-4 pt-3 pb-24 md:pb-4 rounded-t-3xl">
             {/* 时间选择器 */}
             <motion.div
                 initial={{ opacity: 0, y: -10 }}
