@@ -161,6 +161,11 @@
     },
     "setting": {
         "appearance": "外觀",
+        "navVisibility": {
+            "title": "導航選單",
+            "description": "選擇需要在導航欄中顯示的選單項",
+            "locked": "始終顯示"
+        },
         "system": "系統",
         "theme": {
             "label": "主題",

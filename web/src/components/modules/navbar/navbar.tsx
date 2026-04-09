@@ -6,10 +6,14 @@ import { useNavStore, type NavItem } from "@/components/modules/navbar"
 import { ROUTES } from "@/route/config"
 import { usePreload } from "@/route/use-preload"
 import { ENTRANCE_VARIANTS } from "@/lib/animations/fluid-transitions"
+import { useSettingStore } from "@/stores/setting"
 
 export function NavBar() {
     const { activeItem, setActiveItem } = useNavStore()
     const { preload } = usePreload()
+    const hiddenNavItems = useSettingStore((s) => s.hiddenNavItems)
+
+    const visibleRoutes = ROUTES.filter((route) => !hiddenNavItems.includes(route.id))
 
     return (
         <div className="relative z-50 md:min-h-screen">
@@ -25,7 +29,7 @@ export function NavBar() {
                 initial="initial"
                 animate="animate"
             >
-                {ROUTES.map((route, index) => {
+                {visibleRoutes.map((route, index) => {
                     const isActive = activeItem === route.id
                     return (
                         <motion.button

@@ -161,6 +161,11 @@
     },
     "setting": {
         "appearance": "Appearance",
+        "navVisibility": {
+            "title": "Navigation Menu",
+            "description": "Choose which menu items to show in the navigation bar",
+            "locked": "Always visible"
+        },
         "system": "System",
         "theme": {
             "label": "Theme",

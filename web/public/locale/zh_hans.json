@@ -161,6 +161,11 @@
     },
     "setting": {
         "appearance": "外观",
+        "navVisibility": {
+            "title": "导航菜单",
+            "description": "选择需要在导航栏中显示的菜单项",
+            "locked": "始终显示"
+        },
         "system": "系统",
         "theme": {
             "label": "主题",
