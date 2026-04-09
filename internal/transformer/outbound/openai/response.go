@@ -91,6 +91,10 @@ func (o *ResponseOutbound) TransformResponse(ctx context.Context, response *http
 		return nil, fmt.Errorf("failed to unmarshal responses api response: %w", err)
 	}
 
+	if len(resp.Output) == 0 {
+		return nil, fmt.Errorf("upstream returned empty response: no output")
+	}
+
 	// Convert to internal response
 	return convertToLLMResponseFromResponses(&resp), nil
 }

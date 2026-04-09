@@ -367,6 +367,7 @@ func (ra *relayAttempt) handleStreamResponse(ctx context.Context, response *http
 	ra.c.Header("X-Accel-Buffering", "no")
 
 	firstToken := true
+	hasContent := false
 
 	type sseReadResult struct {
 		data string
@@ -408,6 +409,10 @@ func (ra *relayAttempt) handleStreamResponse(ctx context.Context, response *http
 			return fmt.Errorf("first token timeout (%ds)", ra.firstTokenTimeOutSec)
 		case r, ok := <-results:
 			if !ok {
+				if !hasContent {
+					log.Warnf("upstream stream ended with no content")
+					return fmt.Errorf("upstream stream ended with no content")
+				}
 				log.Infof("stream end")
 				return nil
 			}
@@ -420,6 +425,17 @@ func (ra *relayAttempt) handleStreamResponse(ctx context.Context, response *http
 			if err != nil || len(data) == 0 {
 				continue
 			}
+
+			// 跳过 [DONE] 标记：如果没有实际内容，不写入 [DONE] 以避免触发 Write
+			// 从而保持 Written() == false，使重试机制能够生效
+			if r.data == "[DONE]" {
+				if !hasContent {
+					continue
+				}
+			} else {
+				hasContent = true
+			}
+
 			if firstToken {
 				ra.metrics.SetFirstTokenTime(time.Now())
 				firstToken = false
@@ -467,6 +483,16 @@ func (ra *relayAttempt) handleResponse(ctx context.Context, response *http.Respo
 	if err != nil {
 		log.Warnf("failed to transform response: %v", err)
 		return fmt.Errorf("failed to transform outbound response: %w", err)
+	}
+
+	// 统一兜底校验：chat 请求必须有 choices，embedding 请求必须有 embedding data
+	if ra.internalRequest.IsChatRequest() && len(internalResponse.Choices) == 0 {
+		log.Warnf("upstream returned empty response for chat request: no choices")
+		return fmt.Errorf("upstream returned empty response: no choices")
+	}
+	if ra.internalRequest.IsEmbeddingRequest() && len(internalResponse.EmbeddingData) == 0 {
+		log.Warnf("upstream returned empty response for embedding request: no embedding data")
+		return fmt.Errorf("upstream returned empty response: no embedding data")
 	}
 
 	inResponse, err := ra.inAdapter.TransformResponse(ctx, internalResponse)

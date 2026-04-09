@@ -100,6 +100,10 @@ func (o *EmbeddingOutbound) TransformResponse(ctx context.Context, response *htt
 		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
 
+	if len(openAIResp.Data) == 0 {
+		return nil, fmt.Errorf("upstream returned empty response: no embedding data")
+	}
+
 	// 转换为内部格式
 	resp := &model.InternalLLMResponse{
 		ID:            openAIResp.ID,

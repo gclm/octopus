@@ -106,6 +106,10 @@ func (o *MessageOutbound) TransformResponse(ctx context.Context, response *http.
 		return nil, fmt.Errorf("failed to unmarshal anthropic response: %w", err)
 	}
 
+	if len(anthropicResp.Content) == 0 {
+		return nil, fmt.Errorf("upstream returned empty response: no content blocks")
+	}
+
 	// Convert to internal response
 	return convertToLLMResponse(&anthropicResp), nil
 }

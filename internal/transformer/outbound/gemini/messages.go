@@ -81,6 +81,10 @@ func (o *MessagesOutbound) TransformResponse(ctx context.Context, response *http
 		return nil, fmt.Errorf("failed to unmarshal gemini response: %w", err)
 	}
 
+	if len(geminiResp.Candidates) == 0 {
+		return nil, fmt.Errorf("upstream returned empty response: no candidates")
+	}
+
 	// Convert Gemini response to internal format
 	return convertGeminiToLLMResponse(&geminiResp, false), nil
 }

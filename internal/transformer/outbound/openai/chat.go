@@ -115,6 +115,11 @@ func (o *ChatOutbound) TransformResponse(ctx context.Context, response *http.Res
 	if err := json.Unmarshal(body, &resp); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
+
+	if len(resp.Choices) == 0 {
+		return nil, fmt.Errorf("upstream returned empty response: no choices")
+	}
+
 	return &resp, nil
 }
 
