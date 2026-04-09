@@ -101,14 +101,17 @@
             "noData": "無數據"
         },
         "total": {
-            "requestStats": "請求統計",
-            "totalStats": "全部統計",
-            "inputStats": "輸入統計",
-            "outputStats": "輸出統計",
+            "coreMetrics": "核心指標",
+            "costAnalysis": "成本分析",
+            "successRate": "成功率",
+            "avgResponseTime": "平均響應",
             "requestCount": "請求次數",
-            "timeConsumed": "消耗時間",
-            "totalToken": "消耗 Token",
-            "totalCost": "消耗費用",
+            "totalToken": "Token 用量",
+            "totalCost": "總成本",
+            "costSaved": "節省成本",
+            "cacheEfficiency": "緩存效率",
+            "cacheHitRate": "命中率",
+            "cachedTokens": "緩存 Tokens",
             "inputTokens": "輸入 Tokens",
             "inputCost": "輸入費用",
             "outputTokens": "輸出 Tokens",
@@ -138,6 +141,22 @@
             "sortByTokens": "Tokens",
             "noData": "暫無排行數據",
             "successRate": "成功率"
+        },
+        "dateRange": {
+            "today": "今天",
+            "3days": "3天",
+            "7days": "7天",
+            "30days": "30天",
+            "custom": "自定義"
+        },
+        "modelDistribution": {
+            "title": "模型分佈",
+            "noData": "暫無模型數據"
+        },
+        "tabs": {
+            "trend": "趨勢",
+            "model": "模型",
+            "channel": "供應源"
         }
     },
     "setting": {

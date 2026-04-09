@@ -101,14 +101,17 @@
             "noData": "No Data"
         },
         "total": {
-            "requestStats": "Request Stats",
-            "totalStats": "Total Stats",
-            "inputStats": "Input Stats",
-            "outputStats": "Output Stats",
+            "coreMetrics": "Core Metrics",
+            "costAnalysis": "Cost Analysis",
+            "successRate": "Success Rate",
+            "avgResponseTime": "Avg Response",
             "requestCount": "Requests",
-            "timeConsumed": "Time Consumed",
-            "totalToken": "Tokens Used",
+            "totalToken": "Total Tokens",
             "totalCost": "Total Cost",
+            "costSaved": "Cost Saved",
+            "cacheEfficiency": "Cache Efficiency",
+            "cacheHitRate": "Hit Rate",
+            "cachedTokens": "Cached Tokens",
             "inputTokens": "Input Tokens",
             "inputCost": "Input Cost",
             "outputTokens": "Output Tokens",
@@ -138,6 +141,22 @@
             "sortByTokens": "Tokens",
             "noData": "No ranking data",
             "successRate": "Success Rate"
+        },
+        "dateRange": {
+            "today": "Today",
+            "3days": "3 Days",
+            "7days": "7 Days",
+            "30days": "30 Days",
+            "custom": "Custom"
+        },
+        "modelDistribution": {
+            "title": "Model Distribution",
+            "noData": "No model data"
+        },
+        "tabs": {
+            "trend": "Trend",
+            "model": "Model",
+            "channel": "Channel"
         }
     },
     "setting": {

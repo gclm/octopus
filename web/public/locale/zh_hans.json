@@ -101,14 +101,17 @@
             "noData": "无数据"
         },
         "total": {
-            "requestStats": "请求统计",
-            "totalStats": "全部统计",
-            "inputStats": "输入统计",
-            "outputStats": "输出统计",
+            "coreMetrics": "核心指标",
+            "costAnalysis": "成本分析",
+            "successRate": "成功率",
+            "avgResponseTime": "平均响应",
             "requestCount": "请求次数",
-            "timeConsumed": "消耗时间",
-            "totalToken": "消耗 Token",
-            "totalCost": "消耗费用",
+            "totalToken": "Token 用量",
+            "totalCost": "总成本",
+            "costSaved": "节省成本",
+            "cacheEfficiency": "缓存效率",
+            "cacheHitRate": "命中率",
+            "cachedTokens": "缓存 Tokens",
             "inputTokens": "输入 Tokens",
             "inputCost": "输入费用",
             "outputTokens": "输出 Tokens",
@@ -138,6 +141,22 @@
             "sortByTokens": "Tokens",
             "noData": "暂无排行数据",
             "successRate": "成功率"
+        },
+        "dateRange": {
+            "today": "今天",
+            "3days": "3天",
+            "7days": "7天",
+            "30days": "30天",
+            "custom": "自定义"
+        },
+        "modelDistribution": {
+            "title": "模型分布",
+            "noData": "暂无模型数据"
+        },
+        "tabs": {
+            "trend": "趋势",
+            "model": "模型",
+            "channel": "渠道"
         }
     },
     "setting": {

@@ -36,6 +36,11 @@ var statsAPIKeyCache = cache.New[int, model.StatsAPIKey](16)
 var statsAPIKeyCacheNeedUpdate = make(map[int]struct{})
 var statsAPIKeyCacheNeedUpdateLock sync.Mutex
 
+// StatsModelDaily 缓存：key = "date_name"
+var statsModelDailyCache = cache.New[string, model.StatsModelDaily](256)
+var statsModelDailyCacheNeedUpdate = make(map[string]struct{})
+var statsModelDailyCacheNeedUpdateLock sync.Mutex
+
 func StatsSaveDBTask() {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
@@ -289,6 +294,164 @@ func StatsAPIKeyUpdate(apiKeyID int, metrics model.StatsMetrics) error {
 	statsAPIKeyCacheNeedUpdate[apiKeyID] = struct{}{}
 	statsAPIKeyCacheNeedUpdateLock.Unlock()
 	return nil
+}
+
+// StatsModelDailyUpdate 更新模型每日统计
+func StatsModelDailyUpdate(name string, channelID int, metrics model.StatsMetrics) error {
+	today := time.Now().Format("20060102")
+	key := today + "_" + name
+
+	cache, ok := statsModelDailyCache.Get(key)
+	if !ok {
+		cache = model.StatsModelDaily{
+			Date:      today,
+			Name:      name,
+			ChannelID: channelID,
+		}
+	}
+	cache.StatsMetrics.Add(metrics)
+	statsModelDailyCache.Set(key, cache)
+	statsModelDailyCacheNeedUpdateLock.Lock()
+	statsModelDailyCacheNeedUpdate[key] = struct{}{}
+	statsModelDailyCacheNeedUpdateLock.Unlock()
+	return nil
+}
+
+// StatsDailyGetByRange 按时间范围查询每日统计
+func StatsDailyGetByRange(ctx context.Context, startDate, endDate string) ([]model.StatsDaily, error) {
+	var statsDaily []model.StatsDaily
+	result := db.GetDB().WithContext(ctx).
+		Where("date >= ? AND date <= ?", startDate, endDate).
+		Order("date ASC").
+		Find(&statsDaily)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return statsDaily, nil
+}
+
+// StatsModelDailyGetByRange 按时间范围查询模型每日统计
+func StatsModelDailyGetByRange(ctx context.Context, startDate, endDate string) ([]model.StatsModelDaily, error) {
+	var statsModelDaily []model.StatsModelDaily
+	result := db.GetDB().WithContext(ctx).
+		Where("date >= ? AND date <= ?", startDate, endDate).
+		Order("date ASC, name ASC").
+		Find(&statsModelDaily)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return statsModelDaily, nil
+}
+
+// StatsModelDailyAggregated 聚合后的模型统计（按模型名称汇总）
+type StatsModelDailyAggregated struct {
+	Name          string  `json:"name"`
+	RequestCount  int64   `json:"request_count"`
+	TotalTokens   int64   `json:"total_tokens"`
+	TotalCost     float64 `json:"total_cost"`
+	Percentage    float64 `json:"percentage"`
+}
+
+// StatsModelDailyGetAggregatedByRange 按时间范围查询并聚合模型统计
+func StatsModelDailyGetAggregatedByRange(ctx context.Context, startDate, endDate string) ([]StatsModelDailyAggregated, error) {
+	var results []StatsModelDailyAggregated
+
+	// 使用 SQL 聚合查询
+	err := db.GetDB().WithContext(ctx).
+		Model(&model.StatsModelDaily{}).
+		Select(`
+			name,
+			SUM(request_success + request_failed) as request_count,
+			SUM(input_token + output_token) as total_tokens,
+			SUM(input_cost + output_cost) as total_cost
+		`).
+		Where("date >= ? AND date <= ?", startDate, endDate).
+		Group("name").
+		Order("total_cost DESC").
+		Scan(&results).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	// 计算总成本和百分比
+	var totalCost float64
+	for _, r := range results {
+		totalCost += r.TotalCost
+	}
+	for i := range results {
+		if totalCost > 0 {
+			results[i].Percentage = (results[i].TotalCost / totalCost) * 100
+		}
+	}
+
+	return results, nil
+}
+
+// StatsRangeResponse 时间范围统计响应
+type StatsRangeResponse struct {
+	RequestCount    int64   `json:"request_count"`
+	RequestSuccess  int64   `json:"request_success"`
+	RequestFailed   int64   `json:"request_failed"`
+	SuccessRate     float64 `json:"success_rate"`
+	AvgResponseTime int64   `json:"avg_response_time"`
+	TotalWaitTime   int64   `json:"-"` // 内部使用
+
+	TotalTokens  int64   `json:"total_tokens"`
+	InputTokens  int64   `json:"input_tokens"`
+	OutputTokens int64   `json:"output_tokens"`
+	CachedTokens int64   `json:"cached_tokens"`
+	CacheHitRate float64 `json:"cache_hit_rate"`
+
+	TotalCost  float64 `json:"total_cost"`
+	InputCost  float64 `json:"input_cost"`
+	OutputCost float64 `json:"output_cost"`
+	CachedCost float64 `json:"cached_cost"`
+	CostSaved  float64 `json:"cost_saved"`
+}
+
+// StatsGetByRange 按时间范围查询聚合统计
+func StatsGetByRange(ctx context.Context, startDate, endDate string) (*StatsRangeResponse, error) {
+	var dailyStats []model.StatsDaily
+	result := db.GetDB().WithContext(ctx).
+		Where("date >= ? AND date <= ?", startDate, endDate).
+		Find(&dailyStats)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+
+	response := &StatsRangeResponse{}
+	for _, stat := range dailyStats {
+		response.RequestSuccess += stat.RequestSuccess
+		response.RequestFailed += stat.RequestFailed
+		response.InputTokens += stat.InputToken
+		response.OutputTokens += stat.OutputToken
+		response.InputCost += stat.InputCost
+		response.OutputCost += stat.OutputCost
+		response.TotalWaitTime += stat.WaitTime
+		response.CachedTokens += stat.CachedTokens
+		response.CachedCost += stat.CachedCost
+	}
+
+	response.RequestCount = response.RequestSuccess + response.RequestFailed
+	response.TotalTokens = response.InputTokens + response.OutputTokens
+	response.TotalCost = response.InputCost + response.OutputCost
+
+	// 计算成功率
+	if response.RequestCount > 0 {
+		response.SuccessRate = float64(response.RequestSuccess) / float64(response.RequestCount) * 100
+		response.AvgResponseTime = response.TotalWaitTime / response.RequestCount
+	}
+
+	// 计算缓存命中率
+	if response.InputTokens > 0 {
+		response.CacheHitRate = float64(response.CachedTokens) / float64(response.InputTokens) * 100
+	}
+
+	// 估算节省成本（缓存 token 按正常价格计算）
+	response.CostSaved = response.CachedCost
+
+	return response, nil
 }
 
 func StatsChannelDel(id int) error {

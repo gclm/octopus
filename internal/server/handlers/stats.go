@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/bestruirui/octopus/internal/op"
 	"github.com/bestruirui/octopus/internal/server/middleware"
@@ -32,7 +33,71 @@ func init() {
 		AddRoute(
 			router.NewRoute("/apikey", http.MethodGet).
 				Handle(getStatsAPIKey),
+		).
+		AddRoute(
+			router.NewRoute("/range", http.MethodGet).
+				Handle(getStatsRange),
+		).
+		AddRoute(
+			router.NewRoute("/models", http.MethodGet).
+				Handle(getStatsModels),
 		)
+}
+
+// getStatsRange 按时间范围查询聚合统计
+func getStatsRange(c *gin.Context) {
+	startDate := c.Query("start_date")
+	endDate := c.Query("end_date")
+
+	if startDate == "" || endDate == "" {
+		resp.Error(c, http.StatusBadRequest, "start_date and end_date are required")
+		return
+	}
+
+	// 验证日期格式
+	if _, err := time.Parse("20060102", startDate); err != nil {
+		resp.Error(c, http.StatusBadRequest, "invalid start_date format, expected YYYYMMDD")
+		return
+	}
+	if _, err := time.Parse("20060102", endDate); err != nil {
+		resp.Error(c, http.StatusBadRequest, "invalid end_date format, expected YYYYMMDD")
+		return
+	}
+
+	result, err := op.StatsGetByRange(c.Request.Context(), startDate, endDate)
+	if err != nil {
+		resp.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	resp.Success(c, result)
+}
+
+// getStatsModels 按时间范围查询模型统计
+func getStatsModels(c *gin.Context) {
+	startDate := c.Query("start_date")
+	endDate := c.Query("end_date")
+
+	if startDate == "" || endDate == "" {
+		resp.Error(c, http.StatusBadRequest, "start_date and end_date are required")
+		return
+	}
+
+	// 验证日期格式
+	if _, err := time.Parse("20060102", startDate); err != nil {
+		resp.Error(c, http.StatusBadRequest, "invalid start_date format, expected YYYYMMDD")
+		return
+	}
+	if _, err := time.Parse("20060102", endDate); err != nil {
+		resp.Error(c, http.StatusBadRequest, "invalid end_date format, expected YYYYMMDD")
+		return
+	}
+
+	result, err := op.StatsModelDailyGetAggregatedByRange(c.Request.Context(), startDate, endDate)
+	if err != nil {
+		resp.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	resp.Success(c, result)
 }
 
 func getStatsToday(c *gin.Context) {
