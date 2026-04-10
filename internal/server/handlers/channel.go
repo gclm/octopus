@@ -66,6 +66,9 @@ func listChannel(c *gin.Context) {
 	for i, channel := range channels {
 		stats := op.StatsChannelGet(channel.ID)
 		channels[i].Stats = &stats
+		if op.IsAutoDisabled(channel.ID) {
+			channels[i].AutoDisabled = true
+		}
 	}
 	resp.Success(c, channels)
 }

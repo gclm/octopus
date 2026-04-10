@@ -485,7 +485,8 @@
             "totalCost": "Total Cost",
             "toast": {
                 "enabled": "Channel enabled",
-                "disabled": "Channel disabled"
+                "disabled": "Channel disabled",
+                "auto_disabled": "Auto-paused (consecutive failures)"
             }
         },
         "detail": {

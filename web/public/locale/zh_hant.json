@@ -485,7 +485,8 @@
             "totalCost": "總成本",
             "toast": {
                 "enabled": "供應源已啟用",
-                "disabled": "供應源已停用"
+                "disabled": "供應源已停用",
+                "auto_disabled": "系統自動暫停（連續失敗）"
             }
         },
         "detail": {

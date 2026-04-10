@@ -259,6 +259,11 @@ func ChannelEnabled(id int, enabled bool, ctx context.Context) error {
 	}
 	oldChannel.Enabled = enabled
 	channelCache.Set(id, oldChannel)
+
+	// 用户手动启用，清除自动暂停追踪和失败计数
+	if enabled {
+		ResetChannelFailure(id)
+	}
 	return nil
 }
 

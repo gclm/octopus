@@ -59,4 +59,11 @@ func Init() {
 			log.Warnf("relay log save db task failed: %v", err)
 		}
 	})
+
+	// 注册通道自动暂停恢复任务
+	autoPauseInterval, _ := op.SettingGetInt(model.SettingKeyAutoPauseInterval)
+	if autoPauseInterval <= 0 {
+		autoPauseInterval = 300
+	}
+	Register("channel_auto_pause_recovery", time.Duration(autoPauseInterval)*time.Second, true, ChannelAutoPauseRecoveryTask)
 }

@@ -65,6 +65,7 @@ export type Channel = {
     param_override?: string | null;
     channel_proxy?: string | null;
     match_regex?: string | null;
+    auto_disabled?: boolean; // 是否被系统自动暂停
     stats: StatsChannel;
 };
 
