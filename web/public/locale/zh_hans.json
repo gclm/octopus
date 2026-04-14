@@ -485,8 +485,7 @@
             "totalCost": "总成本",
             "toast": {
                 "enabled": "渠道已启用",
-                "disabled": "渠道已禁用",
-                "auto_disabled": "系统自动暂停（连续失败）"
+                "disabled": "渠道已禁用"
             }
         },
         "detail": {

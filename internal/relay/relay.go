@@ -230,19 +230,6 @@ func (ra *relayAttempt) attempt() attemptResult {
         // 健康分:记录失败
         balancer.RecordHealthFailure(ra.channel.ID, ra.internalRequest.Model)
 
-	// 自动暂停: 跟踪渠道级失败
-	threshold, _ := op.SettingGetInt(dbmodel.SettingKeyAutoPauseThreshold)
-	if threshold <= 0 {
-		threshold = 10
-	}
-	if op.RecordChannelFailure(ra.channel.ID, threshold) {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		if err := op.AutoDisableChannel(ra.channel.ID, ctx); err != nil {
-			log.Errorf("auto-pause: failed to disable channel %d: %v", ra.channel.ID, err)
-		}
-	}
-
 	written := ra.c.Writer.Written()
 	if written {
 		ra.collectResponse()

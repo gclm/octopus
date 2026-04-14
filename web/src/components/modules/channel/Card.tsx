@@ -4,7 +4,7 @@ import {
     MorphingDialogContainer,
     MorphingDialogContent,
 } from '@/components/ui/morphing-dialog';
-import { AlertTriangle, CheckCircle2, DollarSign, Key, Layers, MessageSquare, XCircle } from 'lucide-react';
+import { CheckCircle2, DollarSign, Key, Layers, MessageSquare, XCircle } from 'lucide-react';
 import { type StatsMetricsFormatted } from '@/api/endpoints/stats';
 import { type Channel, useEnableChannel } from '@/api/endpoints/channel';
 import { CardContent } from './CardContent';
@@ -65,13 +65,6 @@ export function Card({ channel, stats, layout = 'grid' }: { channel: Channel; st
                             onClick={(e) => e.stopPropagation()}
                         />
                     </header>
-
-                    {channel.auto_disabled && !channel.enabled && (
-                        <div className="flex items-center gap-1.5 rounded-xl bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-600">
-                            <AlertTriangle className="size-3.5" />
-                            {t('toast.auto_disabled')}
-                        </div>
-                    )}
 
                     {isListLayout ? (
                         <dl className="grid grid-cols-2 gap-2 lg:grid-cols-6">

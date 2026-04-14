@@ -18,9 +18,7 @@ const (
 	SettingKeyCORSAllowOrigins          SettingKey = "cors_allow_origins"           // 跨域白名单(逗号分隔, 如 "example.com,example2.com"). 为空不允许跨域, "*"允许所有
 	SettingKeyCircuitBreakerThreshold   SettingKey = "circuit_breaker_threshold"    // 熔断触发阈值（连续失败次数）
 	SettingKeyCircuitBreakerCooldown    SettingKey = "circuit_breaker_cooldown"     // 熔断基础冷却时间（秒）
-	SettingKeyCircuitBreakerMaxCooldown   SettingKey = "circuit_breaker_max_cooldown" // 熔断最大冷却时间（秒），指数退避上限
-	SettingKeyAutoPauseThreshold          SettingKey = "auto_pause_threshold"         // 通道级连续失败触发自动暂停
-	SettingKeyAutoPauseInterval           SettingKey = "auto_pause_interval"          // 自动暂停恢复检查间隔(秒)
+	SettingKeyCircuitBreakerMaxCooldown SettingKey = "circuit_breaker_max_cooldown" // 熔断最大冷却时间（秒），指数退避上限
 )
 
 type Setting struct {
@@ -39,17 +37,14 @@ func DefaultSettings() []Setting {
 		{Key: SettingKeyRelayLogKeepEnabled, Value: "true"},      // 默认保留历史日志
 		{Key: SettingKeyCircuitBreakerThreshold, Value: "5"},     // 默认连续失败5次触发熔断
 		{Key: SettingKeyCircuitBreakerCooldown, Value: "60"},     // 默认基础冷却60秒
-		{Key: SettingKeyCircuitBreakerMaxCooldown, Value: "600"},  // 默认最大冷却600秒（10分钟）
-		{Key: SettingKeyAutoPauseThreshold, Value: "10"},          // 默认连续失败10次触发自动暂停
-		{Key: SettingKeyAutoPauseInterval, Value: "300"},          // 默认每5分钟检查一次恢复
+		{Key: SettingKeyCircuitBreakerMaxCooldown, Value: "600"}, // 默认最大冷却600秒（10分钟）
 	}
 }
 
 func (s *Setting) Validate() error {
 	switch s.Key {
 	case SettingKeyModelInfoUpdateInterval, SettingKeySyncLLMInterval, SettingKeyRelayLogKeepPeriod,
-		SettingKeyCircuitBreakerThreshold, SettingKeyCircuitBreakerCooldown, SettingKeyCircuitBreakerMaxCooldown,
-		SettingKeyAutoPauseThreshold, SettingKeyAutoPauseInterval:
+		SettingKeyCircuitBreakerThreshold, SettingKeyCircuitBreakerCooldown, SettingKeyCircuitBreakerMaxCooldown:
 		_, err := strconv.Atoi(s.Value)
 		if err != nil {
 			return fmt.Errorf("model info update interval must be an integer")

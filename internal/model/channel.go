@@ -32,7 +32,6 @@ type Channel struct {
 	ChannelProxy  *string               `json:"channel_proxy"`
 	Stats         *StatsChannel         `json:"stats,omitempty" gorm:"foreignKey:ChannelID"`
 	MatchRegex    *string               `json:"match_regex"`
-	AutoDisabled  bool                  `json:"auto_disabled" gorm:"-"` // 是否被系统自动暂停（非用户手动）
 }
 
 type BaseUrl struct {
