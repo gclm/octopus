@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bestruirui/octopus/internal/model"
-	"github.com/bestruirui/octopus/internal/op"
-	"github.com/bestruirui/octopus/internal/price"
-	transformerModel "github.com/bestruirui/octopus/internal/transformer/model"
-	"github.com/bestruirui/octopus/internal/utils/log"
+	"github.com/gclm/octopus/internal/model"
+	"github.com/gclm/octopus/internal/op"
+	"github.com/gclm/octopus/internal/price"
+	transformerModel "github.com/gclm/octopus/internal/transformer/model"
+	"github.com/gclm/octopus/internal/utils/log"
 )
 
 // RelayMetrics 负责最终的日志收集与持久化

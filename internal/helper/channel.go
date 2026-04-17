@@ -6,11 +6,11 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/bestruirui/octopus/internal/client"
-	"github.com/bestruirui/octopus/internal/model"
-	"github.com/bestruirui/octopus/internal/op"
-	"github.com/bestruirui/octopus/internal/utils/log"
-	"github.com/bestruirui/octopus/internal/utils/xstrings"
+	"github.com/gclm/octopus/internal/client"
+	"github.com/gclm/octopus/internal/model"
+	"github.com/gclm/octopus/internal/op"
+	"github.com/gclm/octopus/internal/utils/log"
+	"github.com/gclm/octopus/internal/utils/xstrings"
 	"github.com/dlclark/regexp2"
 )
 

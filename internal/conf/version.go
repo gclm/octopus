@@ -4,6 +4,6 @@ var (
 	Version   = "dev"
 	Commit    = "unknown"
 	BuildTime = "unknown"
-	Author    = "bestrui"
+	Author    = "gclm"
 	Repo      = "https://github.com/gclm/octopus"
 )
