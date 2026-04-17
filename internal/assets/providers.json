@@ -10,11 +10,6 @@
     "base_url": "https://api.anthropic.com/v1"
   },
   {
-    "name": "Gemini",
-    "channel_type": 3,
-    "base_url": "https://generativelanguage.googleapis.com/v1beta"
-  },
-  {
     "name": "火山引擎",
     "channel_type": 4,
     "base_url": "https://ark.cn-beijing.volces.com/api/v3"
@@ -30,14 +25,9 @@
     "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1"
   },
   {
-    "name": "GLM (OpenAI 兼容)",
+    "name": "GLM Coding Plan",
     "channel_type": 0,
     "base_url": "https://open.bigmodel.cn/api/paas/v4"
-  },
-  {
-    "name": "GLM Coding Plan (Anthropic 兼容，适合 Claude Code)",
-    "channel_type": 2,
-    "base_url": "https://open.bigmodel.cn/api/anthropic/v1"
   },
   {
     "name": "GitHub Copilot",
