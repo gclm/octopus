@@ -1,4 +1,5 @@
-import { AutoGroupType, ChannelType, type Channel, useFetchModel } from '@/api/endpoints/channel';
+import { AutoGroupType, ChannelType, type Channel, useFetchModel, useCopilotRequestDeviceCode, useCopilotPollToken } from '@/api/endpoints/channel';
+import { useProviders } from '@/api/endpoints/providers';
 import {
     Select,
     SelectContent,
@@ -12,8 +13,8 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/components/common/Toast';
 import { useTranslations } from 'next-intl';
-import { useEffect, useRef, useState } from 'react';
-import { RefreshCw, X, Plus } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { RefreshCw, X, Plus, ExternalLink } from 'lucide-react';
 
 export interface ChannelKeyFormItem {
     id?: number;
@@ -74,6 +75,103 @@ export function ChannelForm({
 }: ChannelFormProps) {
     const t = useTranslations('channel.form');
 
+    // Fetch providers for auto-fill base_url
+    const { data: providers } = useProviders();
+
+    // ---- GitHub Copilot Device Flow ----
+    const copilotDeviceCodeRef = useRef('');
+    const copilotPollIntervalRef = useRef(5);
+    const copilotTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [copilotStatus, setCopilotStatus] = useState<
+        'idle' | 'loading' | 'waiting' | 'authorized' | 'expired' | 'denied' | 'error'
+    >('idle');
+    const [copilotUserCode, setCopilotUserCode] = useState('');
+    const [copilotVerificationUri, setCopilotVerificationUri] = useState('');
+
+    const formDataRef = useRef(formData);
+    useEffect(() => { formDataRef.current = formData; }, [formData]);
+    const onFormDataChangeRef = useRef(onFormDataChange);
+    useEffect(() => { onFormDataChangeRef.current = onFormDataChange; }, [onFormDataChange]);
+
+    const copilotRequestDeviceCode = useCopilotRequestDeviceCode();
+    const copilotPollToken = useCopilotPollToken();
+
+    // Cleanup timer on unmount
+    useEffect(() => {
+        return () => {
+            if (copilotTimerRef.current) clearTimeout(copilotTimerRef.current);
+        };
+    }, []);
+
+    // Reset device flow when switching away from GitHub Copilot type
+    useEffect(() => {
+        if (formData.type !== ChannelType.GithubCopilot) {
+            if (copilotTimerRef.current) {
+                clearTimeout(copilotTimerRef.current);
+                copilotTimerRef.current = null;
+            }
+            setCopilotStatus('idle');
+            copilotDeviceCodeRef.current = '';
+        }
+    }, [formData.type]);
+
+    const startPollLoop = useCallback(() => {
+        const poll = async () => {
+            if (!copilotDeviceCodeRef.current) return;
+            try {
+                const result = await copilotPollToken.mutateAsync(copilotDeviceCodeRef.current);
+                if (result.access_token) {
+                    setCopilotStatus('authorized');
+                    onFormDataChangeRef.current({
+                        ...formDataRef.current,
+                        base_urls: [{ url: 'https://api.githubcopilot.com', delay: 0 }],
+                        keys: [{ enabled: true, channel_key: result.access_token }],
+                    });
+                    return;
+                }
+                if (result.error === 'slow_down') {
+                    copilotPollIntervalRef.current += 5;
+                } else if (result.error === 'expired_token') {
+                    setCopilotStatus('expired');
+                    return;
+                } else if (result.error === 'access_denied') {
+                    setCopilotStatus('denied');
+                    return;
+                } else if (result.error && result.error !== 'authorization_pending') {
+                    setCopilotStatus('error');
+                    return;
+                }
+            } catch {
+                // network error, retry
+            }
+            copilotTimerRef.current = setTimeout(poll, copilotPollIntervalRef.current * 1000);
+        };
+        copilotTimerRef.current = setTimeout(poll, copilotPollIntervalRef.current * 1000);
+    }, [copilotPollToken]);
+
+    const handleCopilotStartAuth = async () => {
+        if (copilotTimerRef.current) {
+            clearTimeout(copilotTimerRef.current);
+            copilotTimerRef.current = null;
+        }
+        copilotDeviceCodeRef.current = '';
+        copilotPollIntervalRef.current = 5;
+        setCopilotStatus('loading');
+        try {
+            const result = await copilotRequestDeviceCode.mutateAsync();
+            copilotDeviceCodeRef.current = result.device_code;
+            copilotPollIntervalRef.current = result.interval || 5;
+            setCopilotUserCode(result.user_code);
+            setCopilotVerificationUri(result.verification_uri);
+            setCopilotStatus('waiting');
+            startPollLoop();
+        } catch {
+            setCopilotStatus('error');
+            toast.error(t('copilotError'));
+        }
+    };
+    // ---- End GitHub Copilot Device Flow ----
+
     // Ensure the form always shows at least 1 row for base_urls / keys / custom_header.
     // This avoids "empty list" UI and also keeps URL + APIKEY layout consistent.
     useEffect(() => {
@@ -89,6 +187,18 @@ export function ChannelForm({
             onFormDataChange({ ...formData, custom_header: [{ header_key: '', header_value: '' }] });
         }
     }, [formData, onFormDataChange]);
+
+    // Auto-fill base_url when type changes and base_url is empty
+    useEffect(() => {
+        if (!providers) return;
+        const provider = providers.find((p) => p.channel_type === formData.type);
+        if (provider && formData.base_urls.length === 1 && formData.base_urls[0].url === '') {
+            onFormDataChange({
+                ...formData,
+                base_urls: [{ url: provider.base_url, delay: 0 }],
+            });
+        }
+    }, [formData.type, providers, formData.base_urls]);
 
     const autoModels = formData.model
         ? formData.model.split(',').map((m) => m.trim()).filter(Boolean)
@@ -256,6 +366,7 @@ export function ChannelForm({
                             <SelectItem className='rounded-xl' value={String(ChannelType.Gemini)}>{t('typeGemini')}</SelectItem>
                             <SelectItem className='rounded-xl' value={String(ChannelType.Volcengine)}>{t('typeVolcengine')}</SelectItem>
                             <SelectItem className='rounded-xl' value={String(ChannelType.OpenAIEmbedding)}>{t('typeOpenAIEmbedding')}</SelectItem>
+                            <SelectItem className='rounded-xl' value={String(ChannelType.GithubCopilot)}>{t('typeGithubCopilot')}</SelectItem>
                         </SelectContent>
                     </Select>
                 </div>
@@ -304,6 +415,59 @@ export function ChannelForm({
                     ))}
                 </div>
             </div>
+
+            {/* GitHub Copilot OAuth Device Flow */}
+            {formData.type === ChannelType.GithubCopilot && (
+                <div className="space-y-3 p-4 bg-muted/30 rounded-xl border border-border">
+                    <div className="text-sm font-medium text-card-foreground">{t('copilotAuth')}</div>
+                    {copilotStatus === 'idle' && (
+                        <Button type="button" variant="outline" onClick={handleCopilotStartAuth} className="rounded-xl">
+                            <ExternalLink className="h-4 w-4 mr-2" />
+                            {t('copilotStartAuth')}
+                        </Button>
+                    )}
+                    {copilotStatus === 'loading' && (
+                        <div className="text-sm text-muted-foreground">{t('copilotLoading')}</div>
+                    )}
+                    {copilotStatus === 'waiting' && (
+                        <div className="space-y-2">
+                            <div className="text-sm text-muted-foreground">{t('copilotWaiting')}</div>
+                            <div className="flex items-center gap-2">
+                                <code className="px-3 py-1.5 bg-muted rounded-lg text-sm font-mono tracking-wider font-bold">{copilotUserCode}</code>
+                                <Button type="button" variant="ghost" size="sm" onClick={() => { navigator.clipboard.writeText(copilotUserCode); }} className="rounded-xl">
+                                    {t('copilotCopyCode')}
+                                </Button>
+                            </div>
+                            <a href={copilotVerificationUri} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline">
+                                <ExternalLink className="h-3.5 w-3.5" />
+                                {copilotVerificationUri}
+                            </a>
+                        </div>
+                    )}
+                    {copilotStatus === 'authorized' && (
+                        <div className="text-sm text-green-600 font-medium">{t('copilotAuthorized')}</div>
+                    )}
+                    {copilotStatus === 'expired' && (
+                        <div className="space-y-2">
+                            <div className="text-sm text-destructive">{t('copilotExpired')}</div>
+                            <Button type="button" variant="outline" onClick={handleCopilotStartAuth} className="rounded-xl">
+                                {t('copilotRetry')}
+                            </Button>
+                        </div>
+                    )}
+                    {copilotStatus === 'denied' && (
+                        <div className="text-sm text-destructive">{t('copilotDenied')}</div>
+                    )}
+                    {copilotStatus === 'error' && (
+                        <div className="space-y-2">
+                            <div className="text-sm text-destructive">{t('copilotError')}</div>
+                            <Button type="button" variant="outline" onClick={handleCopilotStartAuth} className="rounded-xl">
+                                {t('copilotRetry')}
+                            </Button>
+                        </div>
+                    )}
+                </div>
+            )}
 
             <div className="space-y-2">
                 <div className="flex items-center justify-between">

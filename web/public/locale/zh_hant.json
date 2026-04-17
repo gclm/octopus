@@ -50,7 +50,8 @@
         "key": "金鑰",
         "model": "價格",
         "log": "日誌",
-        "setting": "設定"
+        "setting": "設定",
+        "doc": "API 文件"
     },
     "toolbar": {
         "popover": {
@@ -564,6 +565,17 @@
             "typeAnthropic": "Anthropic",
             "typeGemini": "Gemini",
             "typeVolcengine": "火山引擎",
+            "typeGithubCopilot": "GitHub Copilot",
+            "copilotAuth": "GitHub Copilot 授權",
+            "copilotStartAuth": "透過 GitHub 授權",
+            "copilotLoading": "正在取得裝置碼...",
+            "copilotWaiting": "請造訪下方連結並輸入驗證碼完成授權：",
+            "copilotCopyCode": "複製",
+            "copilotAuthorized": "授權成功！已取得 Token。",
+            "copilotExpired": "裝置碼已過期，請重試。",
+            "copilotDenied": "使用者拒絕了授權。",
+            "copilotError": "GitHub Copilot 授權失敗，請重試。",
+            "copilotRetry": "重試",
             "autoSync": "自動同步",
             "autoGroup": "自動分組",
             "autoGroupNone": "不自動分組",
@@ -574,5 +586,17 @@
             "matchRegexPlaceholder": "可選：用於匹配請求模型名稱的正規表示式",
             "remark": "備註"
         }
+    },
+    "doc": {
+        "title": "API 文件",
+        "baseUrl": "介面位址",
+        "apiType": "介面類型",
+        "apiKey": "API 金鑰",
+        "selectApiKey": "選擇 API 金鑰",
+        "model": "模型",
+        "selectModel": "選擇模型",
+        "curl": "cURL 命令",
+        "copy": "複製",
+        "copied": "已複製"
     }
 }

@@ -50,7 +50,8 @@
         "key": "Key",
         "model": "Price",
         "log": "Log",
-        "setting": "Setting"
+        "setting": "Setting",
+        "doc": "API Docs"
     },
     "toolbar": {
         "popover": {
@@ -564,6 +565,17 @@
             "typeAnthropic": "Anthropic",
             "typeGemini": "Gemini",
             "typeVolcengine": "Volcengine",
+            "typeGithubCopilot": "GitHub Copilot",
+            "copilotAuth": "GitHub Copilot Authorization",
+            "copilotStartAuth": "Authorize with GitHub",
+            "copilotLoading": "Requesting device code...",
+            "copilotWaiting": "Please visit the URL below and enter the code to authorize:",
+            "copilotCopyCode": "Copy",
+            "copilotAuthorized": "Authorization successful! Token has been obtained.",
+            "copilotExpired": "Device code expired. Please try again.",
+            "copilotDenied": "Authorization denied by user.",
+            "copilotError": "GitHub Copilot authorization failed. Please try again.",
+            "copilotRetry": "Retry",
             "autoSync": "Auto Sync",
             "autoGroup": "Auto Group",
             "autoGroupNone": "None",
@@ -574,5 +586,17 @@
             "matchRegexPlaceholder": "Optional: regex pattern to match request model names",
             "remark": "Remark"
         }
+    },
+    "doc": {
+        "title": "API Documentation",
+        "baseUrl": "Base URL",
+        "apiType": "API Type",
+        "apiKey": "API Key",
+        "selectApiKey": "Select API Key",
+        "model": "Model",
+        "selectModel": "Select Model",
+        "curl": "cURL Command",
+        "copy": "Copy",
+        "copied": "Copied"
     }
 }

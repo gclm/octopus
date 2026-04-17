@@ -13,6 +13,7 @@ export enum ChannelType {
     Gemini = 3,
     Volcengine = 4,
     OpenAIEmbedding = 5,
+    GithubCopilot = 6,
 }
 
 /**
@@ -360,6 +361,39 @@ export function useSyncChannel() {
         },
         onError: (error) => {
             logger.error('渠道同步失败:', error);
+        },
+    });
+}
+
+// ---- GitHub Copilot Device Flow ----
+
+export type CopilotDeviceCodeResponse = {
+    device_code: string;
+    user_code: string;
+    verification_uri: string;
+    expires_in: number;
+    interval: number;
+};
+
+export type CopilotPollResponse = {
+    access_token?: string;
+    token_type?: string;
+    scope?: string;
+    error?: string;
+};
+
+export function useCopilotRequestDeviceCode() {
+    return useMutation({
+        mutationFn: async () => {
+            return apiClient.post<CopilotDeviceCodeResponse>('/api/v1/channel/copilot/device-code', {});
+        },
+    });
+}
+
+export function useCopilotPollToken() {
+    return useMutation({
+        mutationFn: async (deviceCode: string) => {
+            return apiClient.post<CopilotPollResponse>('/api/v1/channel/copilot/poll-token', { device_code: deviceCode });
         },
     });
 }
