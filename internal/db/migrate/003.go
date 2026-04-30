@@ -44,6 +44,10 @@ func migrateEndpoints(db *gorm.DB) error {
 
 	// 需要迁移：有旧列且无新列
 	if hasType && hasBaseUrls && !hasEndpoints {
+		if err := db.Exec("ALTER TABLE channels ADD COLUMN endpoints TEXT").Error; err != nil {
+			return fmt.Errorf("failed to add endpoints column: %w", err)
+		}
+
 		type row struct {
 			ID       int    `gorm:"column:id"`
 			Type     int    `gorm:"column:type"`
