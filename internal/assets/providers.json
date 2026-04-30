@@ -18,12 +18,6 @@
     ]
   },
   {
-    "name": "火山引擎",
-    "endpoints": [
-      {"type": 4, "base_url": "https://ark.cn-beijing.volces.com/api/v3"}
-    ]
-  },
-  {
     "name": "OpenAI Embedding",
     "endpoints": [
       {"type": 5, "base_url": "https://api.openai.com/v1"}

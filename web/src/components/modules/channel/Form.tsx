@@ -21,7 +21,6 @@ const endpointTypeLabels: Record<number, string> = {
     [OutboundType.OpenAIResponse]: 'OpenAI Response',
     [OutboundType.Anthropic]: 'Anthropic',
     [OutboundType.Gemini]: 'Gemini',
-    [OutboundType.Volcengine]: '火山引擎',
     [OutboundType.OpenAIEmbedding]: 'OpenAI Embedding',
 };
 
