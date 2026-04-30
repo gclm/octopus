@@ -3,6 +3,9 @@ package model
 import (
 	"testing"
 	"time"
+
+	"github.com/gclm/octopus/internal/transformer/inbound"
+	"github.com/gclm/octopus/internal/transformer/outbound"
 )
 
 func TestChannel_GetChannelKey(t *testing.T) {
@@ -223,29 +226,39 @@ func TestChannel_GetBaseUrl(t *testing.T) {
 			expected: "",
 		},
 		{
-			name:     "channel with no base URLs returns empty",
+			name:     "channel with no endpoints returns empty",
 			channel:  &Channel{ID: 1},
 			expected: "",
 		},
 		{
-			name: "selects URL with lowest delay",
+			name: "returns first enabled endpoint base_url",
 			channel: &Channel{
 				ID: 1,
-				BaseUrls: []BaseUrl{
-					{URL: "https://api1.example.com", Delay: 100},
-					{URL: "https://api2.example.com", Delay: 50},
-					{URL: "https://api3.example.com", Delay: 200},
+				Endpoints: []Endpoint{
+					{Type: outbound.OutboundTypeOpenAIChat, BaseUrl: "https://api1.example.com", Enabled: true},
+					{Type: outbound.OutboundTypeAnthropic, BaseUrl: "https://api2.example.com", Enabled: true},
+				},
+			},
+			expected: "https://api1.example.com",
+		},
+		{
+			name: "skips disabled endpoints",
+			channel: &Channel{
+				ID: 1,
+				Endpoints: []Endpoint{
+					{Type: outbound.OutboundTypeOpenAIChat, BaseUrl: "https://api1.example.com", Enabled: false},
+					{Type: outbound.OutboundTypeAnthropic, BaseUrl: "https://api2.example.com", Enabled: true},
 				},
 			},
 			expected: "https://api2.example.com",
 		},
 		{
-			name: "skips empty URLs",
+			name: "skips empty base_url",
 			channel: &Channel{
 				ID: 1,
-				BaseUrls: []BaseUrl{
-					{URL: "", Delay: 10},
-					{URL: "https://api.example.com", Delay: 50},
+				Endpoints: []Endpoint{
+					{Type: outbound.OutboundTypeOpenAIChat, BaseUrl: "", Enabled: true},
+					{Type: outbound.OutboundTypeAnthropic, BaseUrl: "https://api.example.com", Enabled: true},
 				},
 			},
 			expected: "https://api.example.com",
@@ -257,6 +270,114 @@ func TestChannel_GetBaseUrl(t *testing.T) {
 			result := tt.channel.GetBaseUrl()
 			if result != tt.expected {
 				t.Errorf("expected %q, got %q", tt.expected, result)
+			}
+		})
+	}
+}
+
+func TestChannel_MatchEndpoint(t *testing.T) {
+	tests := []struct {
+		name         string
+		channel      *Channel
+		inboundType  inbound.InboundType
+		expectNil    bool
+		expectExact  bool
+		expectedType outbound.OutboundType
+		expectedUrl  string
+	}{
+		{
+			name:        "nil channel returns nil",
+			channel:     nil,
+			inboundType: inbound.InboundTypeOpenAIChat,
+			expectNil:   true,
+		},
+		{
+			name:        "no endpoints returns nil",
+			channel:     &Channel{ID: 1},
+			inboundType: inbound.InboundTypeOpenAIChat,
+			expectNil:   true,
+		},
+		{
+			name: "exact match OpenAI",
+			channel: &Channel{
+				ID: 1,
+				Endpoints: []Endpoint{
+					{Type: outbound.OutboundTypeOpenAIChat, BaseUrl: "https://api.openai.com/v1", Enabled: true},
+					{Type: outbound.OutboundTypeAnthropic, BaseUrl: "https://api.anthropic.com/v1", Enabled: true},
+				},
+			},
+			inboundType:  inbound.InboundTypeOpenAIChat,
+			expectNil:    false,
+			expectExact:  true,
+			expectedType: outbound.OutboundTypeOpenAIChat,
+			expectedUrl:  "https://api.openai.com/v1",
+		},
+		{
+			name: "exact match Anthropic",
+			channel: &Channel{
+				ID: 1,
+				Endpoints: []Endpoint{
+					{Type: outbound.OutboundTypeOpenAIChat, BaseUrl: "https://api.openai.com/v1", Enabled: true},
+					{Type: outbound.OutboundTypeAnthropic, BaseUrl: "https://api.anthropic.com/v1", Enabled: true},
+				},
+			},
+			inboundType:  inbound.InboundTypeAnthropic,
+			expectNil:    false,
+			expectExact:  true,
+			expectedType: outbound.OutboundTypeAnthropic,
+			expectedUrl:  "https://api.anthropic.com/v1",
+		},
+		{
+			name: "fallback when no exact match",
+			channel: &Channel{
+				ID: 1,
+				Endpoints: []Endpoint{
+					{Type: outbound.OutboundTypeOpenAIChat, BaseUrl: "https://api.openai.com/v1", Enabled: true},
+				},
+			},
+			inboundType:  inbound.InboundTypeAnthropic,
+			expectNil:    false,
+			expectExact:  false,
+			expectedType: outbound.OutboundTypeOpenAIChat,
+			expectedUrl:  "https://api.openai.com/v1",
+		},
+		{
+			name: "skips disabled endpoint for exact match, falls back",
+			channel: &Channel{
+				ID: 1,
+				Endpoints: []Endpoint{
+					{Type: outbound.OutboundTypeOpenAIChat, BaseUrl: "https://api.openai.com/v1", Enabled: false},
+					{Type: outbound.OutboundTypeAnthropic, BaseUrl: "https://api.anthropic.com/v1", Enabled: true},
+				},
+			},
+			inboundType:  inbound.InboundTypeOpenAIChat,
+			expectNil:    false,
+			expectExact:  false,
+			expectedType: outbound.OutboundTypeAnthropic,
+			expectedUrl:  "https://api.anthropic.com/v1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ep, exact := tt.channel.MatchEndpoint(tt.inboundType)
+			if tt.expectNil {
+				if ep != nil {
+					t.Error("expected nil endpoint")
+				}
+				return
+			}
+			if ep == nil {
+				t.Fatal("expected non-nil endpoint")
+			}
+			if exact != tt.expectExact {
+				t.Errorf("expected exact=%v, got exact=%v", tt.expectExact, exact)
+			}
+			if ep.Type != tt.expectedType {
+				t.Errorf("expected type %d, got %d", tt.expectedType, ep.Type)
+			}
+			if ep.BaseUrl != tt.expectedUrl {
+				t.Errorf("expected url %q, got %q", tt.expectedUrl, ep.BaseUrl)
 			}
 		})
 	}

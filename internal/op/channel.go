@@ -65,18 +65,17 @@ func ChannelKeyUpdate(key model.ChannelKey) error {
 	channelKeyCacheNeedUpdateLock.Unlock()
 	return nil
 }
-func ChannelBaseUrlUpdate(channelID int, baseUrl []model.BaseUrl) error {
+func ChannelEndpointsUpdate(channelID int, endpoints []model.Endpoint) error {
 	ch, ok := channelCache.Get(channelID)
 	if !ok {
 		return fmt.Errorf("channel not found")
 	}
-	// Copy to decouple callers from internal cache storage.
-	if baseUrl == nil {
-		ch.BaseUrls = nil
+	if endpoints == nil {
+		ch.Endpoints = nil
 	} else {
-		cp := make([]model.BaseUrl, len(baseUrl))
-		copy(cp, baseUrl)
-		ch.BaseUrls = cp
+		cp := make([]model.Endpoint, len(endpoints))
+		copy(cp, endpoints)
+		ch.Endpoints = cp
 	}
 	channelCache.Set(channelID, ch)
 	return nil
@@ -129,17 +128,13 @@ func ChannelUpdate(req *model.ChannelUpdateRequest, ctx context.Context) (*model
 		selectFields = append(selectFields, "name")
 		updates.Name = *req.Name
 	}
-	if req.Type != nil {
-		selectFields = append(selectFields, "type")
-		updates.Type = *req.Type
+	if req.Endpoints != nil {
+		selectFields = append(selectFields, "endpoints")
+		updates.Endpoints = *req.Endpoints
 	}
 	if req.Enabled != nil {
 		selectFields = append(selectFields, "enabled")
 		updates.Enabled = *req.Enabled
-	}
-	if req.BaseUrls != nil {
-		selectFields = append(selectFields, "base_urls")
-		updates.BaseUrls = *req.BaseUrls
 	}
 	if req.Model != nil {
 		selectFields = append(selectFields, "model")

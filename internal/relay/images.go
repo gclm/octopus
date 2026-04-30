@@ -24,6 +24,7 @@ import (
 	"github.com/gclm/octopus/internal/relay/balancer"
 	"github.com/gclm/octopus/internal/relay/bodycache"
 	"github.com/gclm/octopus/internal/server/resp"
+	"github.com/gclm/octopus/internal/transformer/inbound"
 	"github.com/gclm/octopus/internal/transformer/outbound"
 	"github.com/gclm/octopus/internal/utils/log"
 	"github.com/gin-gonic/gin"
@@ -148,9 +149,10 @@ func ImagesHandler(endpoint string, c *gin.Context) {
 			continue
 		}
 
-		// channel.Type 限制：仅 OpenAI Chat/Responses
-		if channel.Type != outbound.OutboundTypeOpenAIChat && channel.Type != outbound.OutboundTypeOpenAIResponse {
-			iter.Skip(channel.ID, 0, channel.Name, fmt.Sprintf("unsupported channel type: %d", channel.Type))
+		// endpoint 类型限制：仅 OpenAI Chat/Responses
+		endpoint, _ := channel.MatchEndpoint(inbound.InboundTypeOpenAIChat)
+		if endpoint == nil || (endpoint.Type != outbound.OutboundTypeOpenAIChat && endpoint.Type != outbound.OutboundTypeOpenAIResponse) {
+			iter.Skip(channel.ID, 0, channel.Name, "no OpenAI-compatible endpoint for images request")
 			continue
 		}
 
@@ -172,7 +174,7 @@ func ImagesHandler(endpoint string, c *gin.Context) {
 		span := iter.StartAttempt(channel.ID, usedKey.ID, channel.Name)
 
 		// 尝试一次转发
-		statusCode, written, usage, upstreamCT, fwdErr := imagesAttempt(ctx, endpoint, c, bc, isMultipart, boundary, jsonPayload, stream, channel, usedKey.ChannelKey, group.FirstTokenTimeOut, metrics, item.ModelName)
+		statusCode, written, usage, upstreamCT, fwdErr := imagesAttempt(ctx, endpoint.BaseUrl, c, bc, isMultipart, boundary, jsonPayload, stream, channel, usedKey.ChannelKey, group.FirstTokenTimeOut, metrics, item.ModelName)
 
 		// 更新 channel key 状态
 		usedKey.StatusCode = statusCode

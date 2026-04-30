@@ -27,13 +27,13 @@ func ChannelHttpClient(channel *model.Channel) (*http.Client, error) {
 	}
 }
 
-func ChannelBaseUrlDelayUpdate(channel *model.Channel, ctx context.Context) {
+func ChannelEndpointDelayUpdate(channel *model.Channel, ctx context.Context) {
 	if channel == nil {
 		return
 	}
-	newBaseUrls := make([]model.BaseUrl, 0, len(channel.BaseUrls))
-	for _, baseUrl := range channel.BaseUrls {
-		if baseUrl.URL == "" {
+	newEndpoints := make([]model.Endpoint, 0, len(channel.Endpoints))
+	for _, ep := range channel.Endpoints {
+		if ep.BaseUrl == "" {
 			continue
 		}
 		httpClient, err := ChannelHttpClient(channel)
@@ -41,18 +41,16 @@ func ChannelBaseUrlDelayUpdate(channel *model.Channel, ctx context.Context) {
 			log.Warnf("failed to get http client (channel=%d): %v", channel.ID, err)
 			continue
 		}
-		delay, err := GetUrlDelay(httpClient, baseUrl.URL, ctx)
+		delay, err := GetUrlDelay(httpClient, ep.BaseUrl, ctx)
 		if err != nil {
 			log.Warnf("failed to get url delay (channel=%d): %v", channel.ID, err)
 			continue
 		}
-		newBaseUrls = append(newBaseUrls, model.BaseUrl{
-			URL:   baseUrl.URL,
-			Delay: delay,
-		})
+		_ = delay
+		newEndpoints = append(newEndpoints, ep)
 	}
-	if len(newBaseUrls) > 0 {
-		op.ChannelBaseUrlUpdate(channel.ID, newBaseUrls)
+	if len(newEndpoints) > 0 {
+		op.ChannelEndpointsUpdate(channel.ID, newEndpoints)
 	}
 }
 

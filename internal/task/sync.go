@@ -35,7 +35,7 @@ func SyncModelsTask() {
 		if !channel.AutoSync {
 			continue
 		}
-		fetchModels, err := helper.FetchModels(ctx, channel)
+		fetchModels, err := helper.FetchModels(ctx, channel.Endpoints, channel.GetChannelKey().ChannelKey, channel.Proxy, channel.CustomHeader)
 		if err != nil {
 			log.Warnf("failed to fetch models for channel %s: %v", channel.Name, err)
 			continue

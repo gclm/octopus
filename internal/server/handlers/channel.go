@@ -88,7 +88,7 @@ func createChannel(c *gin.Context) {
 		modelStr := channel.Model + "," + channel.CustomModel
 		modelArray := strings.Split(modelStr, ",")
 		helper.LLMPriceAddToDB(modelArray, ctx)
-		helper.ChannelBaseUrlDelayUpdate(channel, ctx)
+		helper.ChannelEndpointDelayUpdate(channel, ctx)
 		helper.ChannelAutoGroup(channel, ctx)
 	}(&channel)
 	resp.Success(c, channel)
@@ -113,7 +113,7 @@ func updateChannel(c *gin.Context) {
 		modelStr := channel.Model + "," + channel.CustomModel
 		modelArray := strings.Split(modelStr, ",")
 		helper.LLMPriceAddToDB(modelArray, ctx)
-		helper.ChannelBaseUrlDelayUpdate(channel, ctx)
+		helper.ChannelEndpointDelayUpdate(channel, ctx)
 		helper.ChannelAutoGroup(channel, ctx)
 	}(channel)
 	resp.Success(c, channel)
@@ -149,12 +149,17 @@ func deleteChannel(c *gin.Context) {
 	resp.Success(c, nil)
 }
 func fetchModel(c *gin.Context) {
-	var request model.Channel
+	var request model.ChannelFetchModelRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
 		resp.Error(c, http.StatusBadRequest, resp.ErrInvalidJSON)
 		return
 	}
-	models, err := helper.FetchModels(c.Request.Context(), request)
+	key := request.Key
+	if key == "" {
+		resp.Error(c, http.StatusBadRequest, "key is required")
+		return
+	}
+	models, err := helper.FetchModels(c.Request.Context(), request.Endpoints, key, request.Proxy, request.CustomHeader)
 	if err != nil {
 		resp.Error(c, http.StatusInternalServerError, err.Error())
 		return

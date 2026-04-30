@@ -5,7 +5,7 @@ import {
     MorphingDialogDescription,
     useMorphingDialog,
 } from '@/components/ui/morphing-dialog';
-import { useCreateChannel, ChannelType, AutoGroupType } from '@/api/endpoints/channel';
+import { useCreateChannel, OutboundType, AutoGroupType } from '@/api/endpoints/channel';
 import { useTranslations } from 'next-intl';
 import { ChannelForm, type ChannelFormData } from './Form';
 
@@ -14,8 +14,7 @@ export function CreateDialogContent() {
     const createChannel = useCreateChannel();
     const [formData, setFormData] = useState<ChannelFormData>({
         name: '',
-        type: ChannelType.OpenAIChat,
-        base_urls: [{ url: '', delay: 0 }],
+        endpoints: [{ type: OutboundType.OpenAIChat, base_url: '', enabled: true }],
         custom_header: [],
         channel_proxy: '',
         param_override: '',
@@ -32,10 +31,13 @@ export function CreateDialogContent() {
 
     const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
-        const normalizedBaseUrls = (formData.base_urls ?? []).filter((u) => u.url.trim()).map((u) => ({
-            url: u.url.trim(),
-            delay: Number(u.delay || 0),
-        }));
+        const normalizedEndpoints = (formData.endpoints ?? [])
+            .filter((ep) => ep.base_url.trim())
+            .map((ep) => ({
+                type: ep.type,
+                base_url: ep.base_url.trim(),
+                enabled: ep.enabled,
+            }));
         const normalizedKeys = formData.keys
             .filter((k) => k.channel_key.trim())
             .map((k) => ({ enabled: k.enabled, channel_key: k.channel_key, remark: k.remark ?? '' }));
@@ -48,9 +50,8 @@ export function CreateDialogContent() {
         createChannel.mutate(
             {
                 name: formData.name,
-                type: formData.type,
+                endpoints: normalizedEndpoints,
                 enabled: formData.enabled,
-                base_urls: normalizedBaseUrls,
                 keys: normalizedKeys,
                 model: formData.model,
                 custom_model: formData.custom_model,
@@ -66,8 +67,7 @@ export function CreateDialogContent() {
                 onSuccess: () => {
                     setFormData({
                         name: '',
-                        type: ChannelType.OpenAIChat,
-                        base_urls: [{ url: '', delay: 0 }],
+                        endpoints: [{ type: OutboundType.OpenAIChat, base_url: '', enabled: true }],
                         custom_header: [],
                         channel_proxy: '',
                         param_override: '',

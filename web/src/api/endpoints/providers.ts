@@ -1,11 +1,14 @@
 import { apiClient } from '../client';
 import { useQuery } from '@tanstack/react-query';
 
+export interface ProviderEndpoint {
+    type: number;
+    base_url: string;
+}
+
 export interface Provider {
     name: string;
-    channel_type: number;
-    base_url: string;
-    auth_type?: string; // 'oauth_device' | undefined (default: api_key)
+    endpoints: ProviderEndpoint[];
 }
 
 export function useProviders() {

@@ -3,7 +3,6 @@ package outbound
 import (
 	"github.com/gclm/octopus/internal/transformer/model"
 	"github.com/gclm/octopus/internal/transformer/outbound/authropic"
-	"github.com/gclm/octopus/internal/transformer/outbound/copilot"
 	"github.com/gclm/octopus/internal/transformer/outbound/gemini"
 	"github.com/gclm/octopus/internal/transformer/outbound/openai"
 	"github.com/gclm/octopus/internal/transformer/outbound/volcengine"
@@ -18,7 +17,6 @@ const (
 	OutboundTypeGemini
 	OutboundTypeVolcengine
 	OutboundTypeOpenAIEmbedding
-	OutboundTypeGithubCopilot
 )
 
 // EmbeddingChannelTypes 定义支持 embedding 请求的 channel 类型集合
@@ -33,7 +31,6 @@ var ChatChannelTypes = map[OutboundType]bool{
 	OutboundTypeAnthropic:      true,
 	OutboundTypeGemini:         true,
 	OutboundTypeVolcengine:     true,
-	OutboundTypeGithubCopilot:  true,
 }
 
 // IsEmbeddingChannelType 判断 channel 类型是否支持 embedding 请求
@@ -53,7 +50,6 @@ var outboundFactories = map[OutboundType]func() model.Outbound{
 	OutboundTypeAnthropic:       func() model.Outbound { return &authropic.MessageOutbound{} },
 	OutboundTypeGemini:          func() model.Outbound { return &gemini.MessagesOutbound{} },
 	OutboundTypeVolcengine:      func() model.Outbound { return &volcengine.ResponseOutbound{} },
-	OutboundTypeGithubCopilot:   func() model.Outbound { return &copilot.ChatOutbound{} },
 }
 
 func Get(outboundType OutboundType) model.Outbound {

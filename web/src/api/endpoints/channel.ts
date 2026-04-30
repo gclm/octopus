@@ -3,17 +3,14 @@ import { apiClient } from '../client';
 import { logger } from '@/lib/logger';
 import { formatCount, formatMoney, formatTime } from '@/lib/utils';
 import { StatsChannel, type StatsMetricsFormatted } from './stats';
-/**
- * 渠道类型枚举
- */
-export enum ChannelType {
+
+export enum OutboundType {
     OpenAIChat = 0,
     OpenAIResponse = 1,
     Anthropic = 2,
     Gemini = 3,
     Volcengine = 4,
     OpenAIEmbedding = 5,
-    GithubCopilot = 6,
 }
 
 /**
@@ -26,9 +23,10 @@ export enum AutoGroupType {
     Regex = 3,  // 正则匹配
 }
 
-export type BaseUrl = {
-    url: string;
-    delay: number;
+export type Endpoint = {
+    type: OutboundType;
+    base_url: string;
+    enabled: boolean;
 };
 
 export type CustomHeader = {
@@ -47,18 +45,14 @@ export type ChannelKey = {
     remark: string;
 };
 
-/**
- * 渠道完整数据（与后端 model.Channel 对齐；数组字段在前端保证为 []）
- */
 export type Channel = {
     id: number;
     name: string;
-    type: ChannelType;
-    enabled: boolean;
-    base_urls: BaseUrl[];
+    endpoints: Endpoint[];
     keys: ChannelKey[];
     model: string;
     custom_model: string;
+    enabled: boolean;
     proxy: boolean;
     auto_sync: boolean;
     auto_group: AutoGroupType;
@@ -69,24 +63,19 @@ export type Channel = {
     stats: StatsChannel;
 };
 
-// Internal type: backend may return null for slice fields; normalize to [] in select()
-type ChannelServer = Omit<Channel, 'base_urls' | 'custom_header' | 'keys'> & {
-    base_urls: BaseUrl[] | null;
+type ChannelServer = Omit<Channel, 'endpoints' | 'custom_header' | 'keys'> & {
+    endpoints: Endpoint[] | null;
     custom_header: CustomHeader[] | null;
     keys: ChannelKey[] | null;
 };
 
-/**
- * 创建渠道请求：必填字段 + 可选字段
- */
 export type CreateChannelRequest = {
     name: string;
-    type: ChannelType;
-    enabled?: boolean;
-    base_urls: BaseUrl[];
+    endpoints: Endpoint[];
     keys: Array<Pick<ChannelKey, 'enabled' | 'channel_key' | 'remark'>>;
     model: string;
     custom_model?: string;
+    enabled?: boolean;
     proxy?: boolean;
     auto_sync?: boolean;
     auto_group?: AutoGroupType;
@@ -96,15 +85,11 @@ export type CreateChannelRequest = {
     match_regex?: string | null;
 };
 
-/**
- * 更新渠道请求：id + 可选字段 + keys diff
- */
 export type UpdateChannelRequest = {
     id: number;
     name?: string;
-    type?: ChannelType;
+    endpoints?: Endpoint[];
     enabled?: boolean;
-    base_urls?: BaseUrl[];
     model?: string;
     custom_model?: string;
     proxy?: boolean;
@@ -114,33 +99,18 @@ export type UpdateChannelRequest = {
     channel_proxy?: string | null;
     param_override?: string | null;
     match_regex?: string | null;
-    // keys diff
     keys_to_add?: Array<Pick<ChannelKey, 'enabled' | 'channel_key' | 'remark'>>;
     keys_to_update?: Array<{ id: number; enabled?: boolean; channel_key?: string; remark?: string }>;
     keys_to_delete?: number[];
 };
 
 export type FetchModelRequest = {
-    type: ChannelType;
-    base_urls: BaseUrl[];
-    keys: Array<Pick<ChannelKey, 'enabled' | 'channel_key'>>;
+    endpoints: Endpoint[];
+    key: string;
     proxy?: boolean;
-    channel_proxy?: string | null;
-    match_regex?: string | null;
     custom_header?: CustomHeader[];
 };
 
-/**
- * 获取渠道列表 Hook
- * 
- * @example
- * const { data: channels, isLoading, error } = useChannelList();
- * 
- * if (isLoading) return <Loading />;
- * if (error) return <Error message={error.message} />;
- * 
- * channels?.forEach(channel => console.log(channel.raw.name));
- */
 export function useChannelList() {
     return useQuery({
         queryKey: ['channels', 'list'],
@@ -150,7 +120,7 @@ export function useChannelList() {
         select: (data) => data.map((item) => ({
             raw: ({
                 ...item,
-                base_urls: item.base_urls ?? [],
+                endpoints: item.endpoints ?? [],
                 custom_header: item.custom_header ?? [],
                 keys: item.keys ?? [],
             }) satisfies Channel,
@@ -172,20 +142,6 @@ export function useChannelList() {
     });
 }
 
-/**
- * 创建渠道 Hook
- * 
- * @example
- * const createChannel = useCreateChannel();
- * 
- * createChannel.mutate({
- *   name: 'OpenAI',
- *   type: ChannelType.OpenAIChat,
- *   base_urls: [{ url: 'https://api.openai.com', delay: 0 }],
- *   keys: [{ enabled: true, channel_key: 'sk-xxx' }],
- *   model: 'gpt-4',
- * });
- */
 export function useCreateChannel() {
     const queryClient = useQueryClient();
 
@@ -205,23 +161,6 @@ export function useCreateChannel() {
     });
 }
 
-/**
- * 更新渠道 Hook
- * 
- * @example
- * const updateChannel = useUpdateChannel();
- * 
- * updateChannel.mutate({
- *   id: 1,
- *   name: 'OpenAI Updated',
- *   type: ChannelType.OpenAIChat,
- *   enabled: true,
- *   base_urls: [{ url: 'https://api.openai.com', delay: 0 }],
- *   keys_to_add: [{ enabled: true, channel_key: 'sk-xxx' }],
- *   model: 'gpt-4-turbo',
- *   proxy: false,
- * });
- */
 export function useUpdateChannel() {
     const queryClient = useQueryClient();
 
@@ -240,14 +179,6 @@ export function useUpdateChannel() {
     });
 }
 
-/**
- * 删除渠道 Hook
- * 
- * @example
- * const deleteChannel = useDeleteChannel();
- * 
- * deleteChannel.mutate(1); // 删除 ID 为 1 的渠道
- */
 export function useDeleteChannel() {
     const queryClient = useQueryClient();
 
@@ -266,15 +197,6 @@ export function useDeleteChannel() {
     });
 }
 
-/**
- * 启用/禁用渠道 Hook
- * 
- * @example
- * const enableChannel = useEnableChannel();
- * 
- * enableChannel.mutate({ id: 1, enabled: true }); // 启用 ID 为 1 的渠道
- * enableChannel.mutate({ id: 1, enabled: false }); // 禁用 ID 为 1 的渠道
- */
 export function useEnableChannel() {
     const queryClient = useQueryClient();
 
@@ -292,22 +214,6 @@ export function useEnableChannel() {
     });
 }
 
-/**
- * 获取渠道模型列表 Hook
- * 
- * @example
- * const fetchModel = useFetchModel();
- * 
- * fetchModel.mutate({
- *   type: ChannelType.OpenAIChat,
- *   base_urls: [{ url: 'https://api.openai.com', delay: 0 }],
- *   keys: [{ enabled: true, channel_key: 'sk-xxx' }],
- *   proxy: false,
- * });
- * 
- * // 在 onSuccess 中获取模型列表
- * fetchModel.data // ['gpt-4', 'gpt-3.5-turbo', ...]
- */
 export function useFetchModel() {
     return useMutation({
         mutationFn: async (data: FetchModelRequest) => {
@@ -322,16 +228,6 @@ export function useFetchModel() {
     });
 }
 
-/**
- * 获取渠道最后同步时间 Hook
- * 
- * @example
- * const lastSyncTime = useLastSyncTime();
- * 
- * if (lastSyncTime) {
- *   console.log('最后同步时间:', new Date(lastSyncTime).toLocaleString());
- * }
- */
 export function useLastSyncTime() {
     return useQuery({
         queryKey: ['channels', 'last-sync-time'],
@@ -341,14 +237,7 @@ export function useLastSyncTime() {
         refetchInterval: 30000,
     });
 }
-/**
- * 同步渠道 Hook
- * 
- * @example
- * const syncChannel = useSyncChannel();
- * 
- * syncChannel.mutate();
- */
+
 export function useSyncChannel() {
     const queryClient = useQueryClient();
     return useMutation({
@@ -361,39 +250,6 @@ export function useSyncChannel() {
         },
         onError: (error) => {
             logger.error('渠道同步失败:', error);
-        },
-    });
-}
-
-// ---- GitHub Copilot Device Flow ----
-
-export type CopilotDeviceCodeResponse = {
-    device_code: string;
-    user_code: string;
-    verification_uri: string;
-    expires_in: number;
-    interval: number;
-};
-
-export type CopilotPollResponse = {
-    access_token?: string;
-    token_type?: string;
-    scope?: string;
-    error?: string;
-};
-
-export function useCopilotRequestDeviceCode() {
-    return useMutation({
-        mutationFn: async () => {
-            return apiClient.post<CopilotDeviceCodeResponse>('/api/v1/channel/copilot/device-code', {});
-        },
-    });
-}
-
-export function useCopilotPollToken() {
-    return useMutation({
-        mutationFn: async (deviceCode: string) => {
-            return apiClient.post<CopilotPollResponse>('/api/v1/channel/copilot/poll-token', { device_code: deviceCode });
         },
     });
 }

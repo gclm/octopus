@@ -1,4 +1,4 @@
-import { AutoGroupType, ChannelType, type Channel, useFetchModel, useCopilotRequestDeviceCode, useCopilotPollToken } from '@/api/endpoints/channel';
+import { AutoGroupType, OutboundType, type Channel, type Endpoint, useFetchModel } from '@/api/endpoints/channel';
 import { useProviders } from '@/api/endpoints/providers';
 import {
     Select,
@@ -13,8 +13,17 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/components/common/Toast';
 import { useTranslations } from 'next-intl';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { RefreshCw, X, Plus, ExternalLink } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { RefreshCw, X, Plus } from 'lucide-react';
+
+const endpointTypeLabels: Record<number, string> = {
+    [OutboundType.OpenAIChat]: 'OpenAI Chat',
+    [OutboundType.OpenAIResponse]: 'OpenAI Response',
+    [OutboundType.Anthropic]: 'Anthropic',
+    [OutboundType.Gemini]: 'Gemini',
+    [OutboundType.Volcengine]: '火山引擎',
+    [OutboundType.OpenAIEmbedding]: 'OpenAI Embedding',
+};
 
 export interface ChannelKeyFormItem {
     id?: number;
@@ -28,8 +37,7 @@ export interface ChannelKeyFormItem {
 
 export interface ChannelFormData {
     name: string;
-    type: ChannelType;
-    base_urls: Channel['base_urls'];
+    endpoints: Endpoint[];
     custom_header: Channel['custom_header'];
     channel_proxy: string;
     param_override: string;
@@ -75,108 +83,12 @@ export function ChannelForm({
 }: ChannelFormProps) {
     const t = useTranslations('channel.form');
 
-    // Fetch providers for auto-fill base_url
     const { data: providers } = useProviders();
 
-    // ---- GitHub Copilot Device Flow ----
-    const copilotDeviceCodeRef = useRef('');
-    const copilotPollIntervalRef = useRef(5);
-    const copilotTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const [copilotStatus, setCopilotStatus] = useState<
-        'idle' | 'loading' | 'waiting' | 'authorized' | 'expired' | 'denied' | 'error'
-    >('idle');
-    const [copilotUserCode, setCopilotUserCode] = useState('');
-    const [copilotVerificationUri, setCopilotVerificationUri] = useState('');
-
-    const formDataRef = useRef(formData);
-    useEffect(() => { formDataRef.current = formData; }, [formData]);
-    const onFormDataChangeRef = useRef(onFormDataChange);
-    useEffect(() => { onFormDataChangeRef.current = onFormDataChange; }, [onFormDataChange]);
-
-    const copilotRequestDeviceCode = useCopilotRequestDeviceCode();
-    const copilotPollToken = useCopilotPollToken();
-
-    // Cleanup timer on unmount
+    // 确保 endpoints / keys / custom_header 至少有 1 行
     useEffect(() => {
-        return () => {
-            if (copilotTimerRef.current) clearTimeout(copilotTimerRef.current);
-        };
-    }, []);
-
-    // Reset device flow when switching away from GitHub Copilot type
-    useEffect(() => {
-        if (formData.type !== ChannelType.GithubCopilot) {
-            if (copilotTimerRef.current) {
-                clearTimeout(copilotTimerRef.current);
-                copilotTimerRef.current = null;
-            }
-            setCopilotStatus('idle');
-            copilotDeviceCodeRef.current = '';
-        }
-    }, [formData.type]);
-
-    const startPollLoop = useCallback(() => {
-        const poll = async () => {
-            if (!copilotDeviceCodeRef.current) return;
-            try {
-                const result = await copilotPollToken.mutateAsync(copilotDeviceCodeRef.current);
-                if (result.access_token) {
-                    setCopilotStatus('authorized');
-                    onFormDataChangeRef.current({
-                        ...formDataRef.current,
-                        base_urls: [{ url: 'https://api.githubcopilot.com', delay: 0 }],
-                        keys: [{ enabled: true, channel_key: result.access_token }],
-                    });
-                    return;
-                }
-                if (result.error === 'slow_down') {
-                    copilotPollIntervalRef.current += 5;
-                } else if (result.error === 'expired_token') {
-                    setCopilotStatus('expired');
-                    return;
-                } else if (result.error === 'access_denied') {
-                    setCopilotStatus('denied');
-                    return;
-                } else if (result.error && result.error !== 'authorization_pending') {
-                    setCopilotStatus('error');
-                    return;
-                }
-            } catch {
-                // network error, retry
-            }
-            copilotTimerRef.current = setTimeout(poll, copilotPollIntervalRef.current * 1000);
-        };
-        copilotTimerRef.current = setTimeout(poll, copilotPollIntervalRef.current * 1000);
-    }, [copilotPollToken]);
-
-    const handleCopilotStartAuth = async () => {
-        if (copilotTimerRef.current) {
-            clearTimeout(copilotTimerRef.current);
-            copilotTimerRef.current = null;
-        }
-        copilotDeviceCodeRef.current = '';
-        copilotPollIntervalRef.current = 5;
-        setCopilotStatus('loading');
-        try {
-            const result = await copilotRequestDeviceCode.mutateAsync();
-            copilotDeviceCodeRef.current = result.device_code;
-            copilotPollIntervalRef.current = result.interval || 5;
-            setCopilotUserCode(result.user_code);
-            setCopilotVerificationUri(result.verification_uri);
-            setCopilotStatus('waiting');
-            startPollLoop();
-        } catch {
-            setCopilotStatus('error');
-            toast.error(t('copilotError'));
-        }
-    };
-    // ---- End GitHub Copilot Device Flow ----
-
-    // Ensure the form always shows at least 1 row for base_urls / keys / custom_header.
-    // This avoids "empty list" UI and also keeps URL + APIKEY layout consistent.
-    useEffect(() => {
-        if (!formData.base_urls || formData.base_urls.length === 0) {
-            onFormDataChange({ ...formData, base_urls: [{ url: '', delay: 0 }] });
+        if (!formData.endpoints || formData.endpoints.length === 0) {
+            onFormDataChange({ ...formData, endpoints: [{ type: OutboundType.OpenAIChat, base_url: '', enabled: true }] });
             return;
         }
         if (!formData.keys || formData.keys.length === 0) {
@@ -187,18 +99,6 @@ export function ChannelForm({
             onFormDataChange({ ...formData, custom_header: [{ header_key: '', header_value: '' }] });
         }
     }, [formData, onFormDataChange]);
-
-    // Auto-fill base_url when type changes and base_url is empty
-    useEffect(() => {
-        if (!providers) return;
-        const provider = providers.find((p) => p.channel_type === formData.type);
-        if (provider && formData.base_urls.length === 1 && formData.base_urls[0].url === '') {
-            onFormDataChange({
-                ...formData,
-                base_urls: [{ url: provider.base_url, delay: 0 }],
-            });
-        }
-    }, [formData.type, providers, formData.base_urls]);
 
     const autoModels = formData.model
         ? formData.model.split(',').map((m) => m.trim()).filter(Boolean)
@@ -222,17 +122,12 @@ export function ChannelForm({
     };
 
     const handleRefreshModels = async () => {
-        if (!formData.base_urls?.[0]?.url || !effectiveKey) return;
+        if (!formData.endpoints?.[0]?.base_url || !effectiveKey) return;
         fetchModel.mutate(
             {
-                type: formData.type,
-                base_urls: formData.base_urls,
-                keys: formData.keys
-                    .filter((k) => k.channel_key.trim())
-                    .map((k) => ({ enabled: k.enabled, channel_key: k.channel_key.trim() })),
+                endpoints: formData.endpoints.filter((ep) => ep.base_url.trim()),
+                key: effectiveKey,
                 proxy: formData.proxy,
-                channel_proxy: formData.channel_proxy?.trim() || null,
-                match_regex: formData.match_regex.trim() || null,
                 custom_header: formData.custom_header?.filter((h) => h.header_key.trim()) || [],
             },
             {
@@ -295,23 +190,43 @@ export function ChannelForm({
         onFormDataChange({ ...formData, keys: next });
     };
 
-    const handleAddBaseUrl = () => {
+    // Endpoint 操作
+    const handleAddEndpoint = () => {
         onFormDataChange({
             ...formData,
-            base_urls: [...(formData.base_urls ?? []), { url: '', delay: 0 }],
+            endpoints: [...(formData.endpoints ?? []), { type: OutboundType.OpenAIChat, base_url: '', enabled: true }],
         });
     };
 
-    const handleUpdateBaseUrl = (idx: number, patch: Partial<Channel['base_urls'][number]>) => {
-        const next = (formData.base_urls ?? []).map((u, i) => (i === idx ? { ...u, ...patch } : u));
-        onFormDataChange({ ...formData, base_urls: next });
+    const handleUpdateEndpoint = (idx: number, patch: Partial<Endpoint>) => {
+        const next = (formData.endpoints ?? []).map((ep, i) => (i === idx ? { ...ep, ...patch } : ep));
+        onFormDataChange({ ...formData, endpoints: next });
     };
 
-    const handleRemoveBaseUrl = (idx: number) => {
-        const curr = formData.base_urls ?? [];
+    const handleRemoveEndpoint = (idx: number) => {
+        const curr = formData.endpoints ?? [];
         if (curr.length <= 1) return;
-        onFormDataChange({ ...formData, base_urls: curr.filter((_, i) => i !== idx) });
+        onFormDataChange({ ...formData, endpoints: curr.filter((_, i) => i !== idx) });
     };
+
+    // 预设选择
+    const handleProviderChange = (providerName: string) => {
+        const provider = providers?.find((p) => p.name === providerName);
+        if (!provider) return;
+        onFormDataChange({
+            ...formData,
+            endpoints: provider.endpoints.map((ep) => ({
+                type: ep.type,
+                base_url: ep.base_url,
+                enabled: true,
+            })),
+        });
+    };
+
+    const selectedProvider = providers?.find((p) =>
+        JSON.stringify(p.endpoints.map((ep) => ({ type: ep.type, base_url: ep.base_url }))) ===
+        JSON.stringify(formData.endpoints.map((ep) => ({ type: ep.type, base_url: ep.base_url })))
+    );
 
     const handleAddHeader = () => {
         onFormDataChange({
@@ -349,24 +264,21 @@ export function ChannelForm({
                 </div>
 
                 <div className="space-y-2">
-                    <label htmlFor={`${idPrefix}-type`} className="text-sm font-medium text-card-foreground">
-                        {t('type')}
+                    <label htmlFor={`${idPrefix}-provider`} className="text-sm font-medium text-card-foreground">
+                        {t('provider')}
                     </label>
                     <Select
-                        value={String(formData.type)}
-                        onValueChange={(value) => onFormDataChange({ ...formData, type: Number(value) as ChannelType })}
+                        value={selectedProvider?.name ?? '__custom__'}
+                        onValueChange={handleProviderChange}
                     >
-                        <SelectTrigger id={`${idPrefix}-type`} className="rounded-xl w-full border border-border px-4 py-2 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                        <SelectTrigger id={`${idPrefix}-provider`} className="rounded-xl w-full border border-border px-4 py-2 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent className='rounded-xl'>
-                            <SelectItem className='rounded-xl' value={String(ChannelType.OpenAIChat)}>{t('typeOpenAIChat')}</SelectItem>
-                            <SelectItem className='rounded-xl' value={String(ChannelType.OpenAIResponse)}>{t('typeOpenAIResponse')}</SelectItem>
-                            <SelectItem className='rounded-xl' value={String(ChannelType.Anthropic)}>{t('typeAnthropic')}</SelectItem>
-                            <SelectItem className='rounded-xl' value={String(ChannelType.Gemini)}>{t('typeGemini')}</SelectItem>
-                            <SelectItem className='rounded-xl' value={String(ChannelType.Volcengine)}>{t('typeVolcengine')}</SelectItem>
-                            <SelectItem className='rounded-xl' value={String(ChannelType.OpenAIEmbedding)}>{t('typeOpenAIEmbedding')}</SelectItem>
-                            <SelectItem className='rounded-xl' value={String(ChannelType.GithubCopilot)}>{t('typeGithubCopilot')}</SelectItem>
+                            <SelectItem className='rounded-xl' value="__custom__">{t('providerCustom')}</SelectItem>
+                            {providers?.map((p) => (
+                                <SelectItem key={p.name} className='rounded-xl' value={p.name}>{p.name}</SelectItem>
+                            ))}
                         </SelectContent>
                     </Select>
                 </div>
@@ -375,13 +287,13 @@ export function ChannelForm({
             <div className="space-y-2">
                 <div className="flex items-center justify-between">
                     <label className="text-sm font-medium text-card-foreground">
-                        {t('baseUrls')} {formData.base_urls.length > 0 ? `(${formData.base_urls.length})` : ''}
+                        {t('endpoints')} {formData.endpoints.length > 0 ? `(${formData.endpoints.length})` : ''}
                     </label>
                     <Button
                         type="button"
                         variant="ghost"
                         size="sm"
-                        onClick={handleAddBaseUrl}
+                        onClick={handleAddEndpoint}
                         className="h-6 px-2 text-xs text-muted-foreground/70 hover:text-muted-foreground hover:bg-transparent"
                     >
                         <Plus className="h-3 w-3 mr-1" />
@@ -389,23 +301,30 @@ export function ChannelForm({
                     </Button>
                 </div>
                 <div className="space-y-2">
-                    {(formData.base_urls ?? []).map((u, idx) => (
-                        <div key={`baseurl-${idx}`} className="flex items-center gap-2">
+                    {(formData.endpoints ?? []).map((ep, idx) => (
+                        <div key={`endpoint-${idx}`} className="flex items-center gap-2">
+                            <Badge variant="secondary" className="shrink-0 h-8 px-2 text-xs">
+                                {endpointTypeLabels[ep.type] ?? `Type ${ep.type}`}
+                            </Badge>
                             <Input
-                                id={`${idPrefix}-base-${idx}`}
+                                id={`${idPrefix}-endpoint-${idx}`}
                                 type="url"
-                                value={u.url}
-                                onChange={(e) => handleUpdateBaseUrl(idx, { url: e.target.value })}
-                                placeholder={t('baseUrlUrl')}
+                                value={ep.base_url}
+                                onChange={(e) => handleUpdateEndpoint(idx, { base_url: e.target.value })}
+                                placeholder={t('endpointUrl')}
                                 required={idx === 0}
                                 className="rounded-xl flex-1"
+                            />
+                            <Switch
+                                checked={ep.enabled}
+                                onCheckedChange={(checked) => handleUpdateEndpoint(idx, { enabled: checked })}
                             />
                             <Button
                                 type="button"
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => handleRemoveBaseUrl(idx)}
-                                disabled={(formData.base_urls ?? []).length <= 1}
+                                onClick={() => handleRemoveEndpoint(idx)}
+                                disabled={(formData.endpoints ?? []).length <= 1}
                                 className="h-8 w-8 p-0 rounded-xl text-muted-foreground hover:text-destructive disabled:opacity-40 hover:bg-transparent"
                                 title="Remove"
                             >
@@ -415,59 +334,6 @@ export function ChannelForm({
                     ))}
                 </div>
             </div>
-
-            {/* GitHub Copilot OAuth Device Flow */}
-            {formData.type === ChannelType.GithubCopilot && (
-                <div className="space-y-3 p-4 bg-muted/30 rounded-xl border border-border">
-                    <div className="text-sm font-medium text-card-foreground">{t('copilotAuth')}</div>
-                    {copilotStatus === 'idle' && (
-                        <Button type="button" variant="outline" onClick={handleCopilotStartAuth} className="rounded-xl">
-                            <ExternalLink className="h-4 w-4 mr-2" />
-                            {t('copilotStartAuth')}
-                        </Button>
-                    )}
-                    {copilotStatus === 'loading' && (
-                        <div className="text-sm text-muted-foreground">{t('copilotLoading')}</div>
-                    )}
-                    {copilotStatus === 'waiting' && (
-                        <div className="space-y-2">
-                            <div className="text-sm text-muted-foreground">{t('copilotWaiting')}</div>
-                            <div className="flex items-center gap-2">
-                                <code className="px-3 py-1.5 bg-muted rounded-lg text-sm font-mono tracking-wider font-bold">{copilotUserCode}</code>
-                                <Button type="button" variant="ghost" size="sm" onClick={() => { navigator.clipboard.writeText(copilotUserCode); }} className="rounded-xl">
-                                    {t('copilotCopyCode')}
-                                </Button>
-                            </div>
-                            <a href={copilotVerificationUri} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline">
-                                <ExternalLink className="h-3.5 w-3.5" />
-                                {copilotVerificationUri}
-                            </a>
-                        </div>
-                    )}
-                    {copilotStatus === 'authorized' && (
-                        <div className="text-sm text-green-600 font-medium">{t('copilotAuthorized')}</div>
-                    )}
-                    {copilotStatus === 'expired' && (
-                        <div className="space-y-2">
-                            <div className="text-sm text-destructive">{t('copilotExpired')}</div>
-                            <Button type="button" variant="outline" onClick={handleCopilotStartAuth} className="rounded-xl">
-                                {t('copilotRetry')}
-                            </Button>
-                        </div>
-                    )}
-                    {copilotStatus === 'denied' && (
-                        <div className="text-sm text-destructive">{t('copilotDenied')}</div>
-                    )}
-                    {copilotStatus === 'error' && (
-                        <div className="space-y-2">
-                            <div className="text-sm text-destructive">{t('copilotError')}</div>
-                            <Button type="button" variant="outline" onClick={handleCopilotStartAuth} className="rounded-xl">
-                                {t('copilotRetry')}
-                            </Button>
-                        </div>
-                    )}
-                </div>
-            )}
 
             <div className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -531,7 +397,7 @@ export function ChannelForm({
                         variant="ghost"
                         size="sm"
                         onClick={handleRefreshModels}
-                        disabled={!formData.base_urls?.[0]?.url || !effectiveKey || fetchModel.isPending}
+                        disabled={!formData.endpoints?.[0]?.base_url || !effectiveKey || fetchModel.isPending}
                         className="h-6 px-2 text-xs text-muted-foreground/50 hover:text-muted-foreground hover:bg-transparent"
                     >
                         <RefreshCw className={`h-3 w-3 mr-1 ${fetchModel.isPending ? 'animate-spin' : ''}`} />

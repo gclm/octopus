@@ -23,6 +23,6 @@ func ChannelBaseUrlDelayTask() {
 		return
 	}
 	for _, channel := range channels {
-		helper.ChannelBaseUrlDelayUpdate(&channel, ctx)
+		helper.ChannelEndpointDelayUpdate(&channel, ctx)
 	}
 }

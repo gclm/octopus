@@ -1,43 +1,60 @@
 [
   {
     "name": "OpenAI",
-    "channel_type": 0,
-    "base_url": "https://api.openai.com/v1"
+    "endpoints": [
+      {"type": 0, "base_url": "https://api.openai.com/v1"}
+    ]
   },
   {
     "name": "Anthropic",
-    "channel_type": 2,
-    "base_url": "https://api.anthropic.com/v1"
+    "endpoints": [
+      {"type": 2, "base_url": "https://api.anthropic.com/v1"}
+    ]
+  },
+  {
+    "name": "Google Gemini",
+    "endpoints": [
+      {"type": 3, "base_url": "https://generativelanguage.googleapis.com/v1beta"}
+    ]
   },
   {
     "name": "火山引擎",
-    "channel_type": 4,
-    "base_url": "https://ark.cn-beijing.volces.com/api/v3"
+    "endpoints": [
+      {"type": 4, "base_url": "https://ark.cn-beijing.volces.com/api/v3"}
+    ]
   },
   {
     "name": "OpenAI Embedding",
-    "channel_type": 5,
-    "base_url": "https://api.openai.com/v1"
+    "endpoints": [
+      {"type": 5, "base_url": "https://api.openai.com/v1"}
+    ]
   },
   {
     "name": "百炼 Coding Plan",
-    "channel_type": 0,
-    "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    "endpoints": [
+      {"type": 0, "base_url": "https://coding.dashscope.aliyuncs.com/v1"},
+      {"type": 2, "base_url": "https://coding.dashscope.aliyuncs.com/apps/anthropic"}
+    ]
   },
   {
     "name": "GLM Coding Plan",
-    "channel_type": 0,
-    "base_url": "https://open.bigmodel.cn/api/paas/v4"
-  },
-  {
-    "name": "GitHub Copilot",
-    "channel_type": 6,
-    "base_url": "https://api.githubcopilot.com",
-    "auth_type": "oauth_device"
+    "endpoints": [
+      {"type": 0, "base_url": "https://open.bigmodel.cn/api/coding/paas/v4"},
+      {"type": 2, "base_url": "https://open.bigmodel.cn/api/anthropic"}
+    ]
   },
   {
     "name": "MiniMax Token Plan",
-    "channel_type": 0,
-    "base_url": "https://api.minimax.chat/v1"
+    "endpoints": [
+      {"type": 0, "base_url": "https://api.minimaxi.com/v1"},
+      {"type": 2, "base_url": "https://api.minimaxi.com/anthropic"}
+    ]
+  },
+  {
+    "name": "通用 Coding Plan",
+    "endpoints": [
+      {"type": 0, "base_url": ""},
+      {"type": 2, "base_url": ""}
+    ]
   }
 ]

@@ -11,7 +11,7 @@ import {
     Globe,
     Key
 } from 'lucide-react';
-import { useUpdateChannel, useDeleteChannel, type Channel, type UpdateChannelRequest } from '@/api/endpoints/channel';
+import { useUpdateChannel, useDeleteChannel, type Channel, type UpdateChannelRequest, OutboundType } from '@/api/endpoints/channel';
 import {
     MorphingDialogTitle,
     MorphingDialogDescription,
@@ -27,6 +27,15 @@ import { formatMoney } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 
+const endpointTypeLabels: Record<number, string> = {
+    [OutboundType.OpenAIChat]: 'OpenAI',
+    [OutboundType.OpenAIResponse]: 'OpenAI Response',
+    [OutboundType.Anthropic]: 'Anthropic',
+    [OutboundType.Gemini]: 'Gemini',
+    [OutboundType.Volcengine]: '火山引擎',
+    [OutboundType.OpenAIEmbedding]: 'OpenAI Embedding',
+};
+
 export function CardContent({ channel, stats }: { channel: Channel; stats: StatsMetricsFormatted }) {
     const { setIsOpen } = useMorphingDialog();
     const updateChannel = useUpdateChannel();
@@ -35,9 +44,8 @@ export function CardContent({ channel, stats }: { channel: Channel; stats: Stats
     const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
     const [formData, setFormData] = useState<ChannelFormData>({
         name: channel.name,
-        type: channel.type,
         enabled: channel.enabled,
-        base_urls: channel.base_urls?.length ? channel.base_urls : [{ url: '', delay: 0 }],
+        endpoints: channel.endpoints?.length ? channel.endpoints : [{ type: OutboundType.OpenAIChat, base_url: '', enabled: true }],
         custom_header: channel.custom_header ?? [],
         channel_proxy: channel.channel_proxy ?? '',
         param_override: channel.param_override ?? '',
@@ -63,7 +71,7 @@ export function CardContent({ channel, stats }: { channel: Channel; stats: Stats
 
     const currentView = isEditing ? 'editing' : 'viewing';
 
-    const baseUrlsEqual = (a: Channel['base_urls'] | undefined, b: Channel['base_urls'] | undefined) =>
+    const endpointsEqual = (a: Channel['endpoints'] | undefined, b: Channel['endpoints'] | undefined) =>
         JSON.stringify(a ?? []) === JSON.stringify(b ?? []);
     const headersEqual = (a: Channel['custom_header'] | undefined, b: Channel['custom_header'] | undefined) =>
         JSON.stringify(a ?? []) === JSON.stringify(b ?? []);
@@ -72,15 +80,16 @@ export function CardContent({ channel, stats }: { channel: Channel; stats: Stats
         event.preventDefault();
         const req: UpdateChannelRequest = { id: channel.id };
 
-        // only send changed fields to avoid accidental clears
         if (formData.name !== channel.name) req.name = formData.name;
-        if (formData.type !== channel.type) req.type = formData.type;
         if (formData.enabled !== channel.enabled) req.enabled = formData.enabled;
-        if (!baseUrlsEqual(formData.base_urls, channel.base_urls)) {
-            req.base_urls = (formData.base_urls ?? []).filter((u) => u.url.trim()).map((u) => ({
-                url: u.url.trim(),
-                delay: Number(u.delay || 0),
-            }));
+        if (!endpointsEqual(formData.endpoints, channel.endpoints)) {
+            req.endpoints = (formData.endpoints ?? [])
+                .filter((ep) => ep.base_url.trim())
+                .map((ep) => ({
+                    type: ep.type,
+                    base_url: ep.base_url.trim(),
+                    enabled: ep.enabled,
+                }));
         }
         if (formData.model !== channel.model) req.model = formData.model;
         if (formData.custom_model !== channel.custom_model) req.custom_model = formData.custom_model;
@@ -97,21 +106,18 @@ export function CardContent({ channel, stats }: { channel: Channel; stats: Stats
         const nextChannelProxy = formData.channel_proxy.trim();
         const curChannelProxy = channel.channel_proxy ?? '';
         if (nextChannelProxy !== curChannelProxy) {
-            // Empty string means "clear" for patch semantics; backend maps it to NULL.
             req.channel_proxy = nextChannelProxy;
         }
 
         const nextParamOverride = formData.param_override.trim();
         const curParamOverride = channel.param_override ?? '';
         if (nextParamOverride !== curParamOverride) {
-            // Empty string means "clear" for patch semantics; backend maps it to NULL.
             req.param_override = nextParamOverride;
         }
 
         const nextMatchRegex = formData.match_regex.trim();
         const curMatchRegex = channel.match_regex ?? '';
         if (nextMatchRegex !== curMatchRegex) {
-            // Empty string means "clear" for patch semantics; backend maps it to NULL.
             req.match_regex = nextMatchRegex;
         }
 
@@ -313,35 +319,35 @@ export function CardContent({ channel, stats }: { channel: Channel; stats: Stats
                                     </dl>
                                 </section>
 
-                                {/* Base URLs */}
+                                {/* Endpoints */}
                                 <section className="space-y-3">
                                     <h4 className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                                         <Globe className="size-3.5" />
-                                        {t('sections.baseUrls')}
+                                        {t('sections.endpoints')}
                                     </h4>
                                     <div className="rounded-2xl border bg-card overflow-hidden">
-                                        {channel.base_urls?.map((url, i) => (
+                                        {channel.endpoints?.map((ep, i) => (
                                             <div key={i} className="flex items-center justify-between p-3 sm:p-4 border-b last:border-0 hover:bg-accent/5 transition-colors">
                                                 <div className="flex flex-col gap-1 min-w-0">
-                                                    <span className="font-mono text-sm truncate select-all">{url.url}</span>
+                                                    <span className="font-mono text-sm truncate select-all">{ep.base_url}</span>
                                                 </div>
-                                                <Badge
-                                                    variant="secondary"
-                                                    className={cn(
-                                                        "h-5 px-1.5 text-xs",
-                                                        url.delay < 300
-                                                            ? "bg-green-500/15 text-green-700 dark:text-green-400"
-                                                            : url.delay < 1000
-                                                                ? "bg-orange-500/15 text-orange-700 dark:text-orange-400"
-                                                                : "bg-red-500/15 text-red-700 dark:text-red-400"
-                                                    )}
-                                                >
-                                                    {url.delay}ms
-                                                </Badge>
+                                                <div className="flex items-center gap-2 shrink-0">
+                                                    <Badge
+                                                        variant="secondary"
+                                                        className={cn(
+                                                            "h-5 px-1.5 text-xs",
+                                                            ep.enabled
+                                                                ? "bg-green-500/15 text-green-700 dark:text-green-400"
+                                                                : "bg-gray-500/15 text-gray-700 dark:text-gray-400"
+                                                        )}
+                                                    >
+                                                        {endpointTypeLabels[ep.type] ?? `Type ${ep.type}`}
+                                                    </Badge>
+                                                </div>
                                             </div>
                                         ))}
-                                        {(!channel.base_urls || channel.base_urls.length === 0) && (
-                                            <div className="p-4 text-sm text-muted-foreground text-center">{t('noBaseUrls')}</div>
+                                        {(!channel.endpoints || channel.endpoints.length === 0) && (
+                                            <div className="p-4 text-sm text-muted-foreground text-center">{t('noEndpoints')}</div>
                                         )}
                                     </div>
                                 </section>

@@ -8,56 +8,54 @@ import (
 
 	"github.com/gclm/octopus/internal/model"
 	"github.com/gclm/octopus/internal/transformer/outbound"
-	"github.com/dlclark/regexp2"
 )
 
-func FetchModels(ctx context.Context, request model.Channel) ([]string, error) {
-	client, err := ChannelHttpClient(&request)
+func FetchModels(ctx context.Context, endpoints []model.Endpoint, key string, proxy bool, customHeader []model.CustomHeader) ([]string, error) {
+	channel := &model.Channel{Proxy: proxy, CustomHeader: customHeader}
+	client, err := ChannelHttpClient(channel)
 	if err != nil {
 		return nil, err
 	}
-	fetchModel := make([]string, 0)
-	switch request.Type {
-	case outbound.OutboundTypeAnthropic:
-		fetchModel, err = fetchAnthropicModels(client, ctx, request)
-	case outbound.OutboundTypeGemini:
-		fetchModel, err = fetchGeminiModels(client, ctx, request)
-	default:
-		fetchModel, err = fetchOpenAIModels(client, ctx, request)
-	}
-	if err != nil {
-		return nil, err
-	}
-	if request.MatchRegex != nil && *request.MatchRegex != "" {
-		matchModel := make([]string, 0)
-		re, err := regexp2.Compile(*request.MatchRegex, regexp2.ECMAScript)
+
+	seen := make(map[string]struct{})
+	var allModels []string
+
+	for _, ep := range endpoints {
+		if !ep.Enabled || ep.BaseUrl == "" {
+			continue
+		}
+		var models []string
+		switch ep.Type {
+		case outbound.OutboundTypeAnthropic:
+			models, err = fetchAnthropicModels(client, ctx, ep.BaseUrl, key, customHeader)
+		case outbound.OutboundTypeGemini:
+			models, err = fetchGeminiModels(client, ctx, ep.BaseUrl, key, customHeader)
+		default:
+			models, err = fetchOpenAIModels(client, ctx, ep.BaseUrl, key, customHeader)
+		}
 		if err != nil {
-			return nil, err
+			continue
 		}
-		for _, model := range fetchModel {
-			matched, err := re.MatchString(model)
-			if err != nil {
-				return nil, err
-			}
-			if matched {
-				matchModel = append(matchModel, model)
+		for _, m := range models {
+			if _, ok := seen[m]; !ok {
+				seen[m] = struct{}{}
+				allModels = append(allModels, m)
 			}
 		}
-		return matchModel, nil
 	}
-	return fetchModel, nil
+	return allModels, nil
 }
 
 // refer: https://platform.openai.com/docs/api-reference/models/list
-func fetchOpenAIModels(client *http.Client, ctx context.Context, request model.Channel) ([]string, error) {
+func fetchOpenAIModels(client *http.Client, ctx context.Context, baseURL string, key string, customHeader []model.CustomHeader) ([]string, error) {
 	req, _ := http.NewRequestWithContext(
 		ctx,
 		http.MethodGet,
-		request.GetBaseUrl()+"/models",
+		baseURL+"/models",
 		nil,
 	)
-	req.Header.Set("Authorization", "Bearer "+request.GetChannelKey().ChannelKey)
-	for _, header := range request.CustomHeader {
+	req.Header.Set("Authorization", "Bearer "+key)
+	for _, header := range customHeader {
 		if header.HeaderKey != "" {
 			req.Header.Set(header.HeaderKey, header.HeaderValue)
 		}
@@ -83,7 +81,7 @@ func fetchOpenAIModels(client *http.Client, ctx context.Context, request model.C
 }
 
 // refer: https://ai.google.dev/api/models
-func fetchGeminiModels(client *http.Client, ctx context.Context, request model.Channel) ([]string, error) {
+func fetchGeminiModels(client *http.Client, ctx context.Context, baseURL string, key string, customHeader []model.CustomHeader) ([]string, error) {
 	var allModels []string
 	pageToken := ""
 
@@ -91,11 +89,11 @@ func fetchGeminiModels(client *http.Client, ctx context.Context, request model.C
 		req, _ := http.NewRequestWithContext(
 			ctx,
 			http.MethodGet,
-			request.GetBaseUrl()+"/models",
+			baseURL+"/models",
 			nil,
 		)
-		req.Header.Set("X-Goog-Api-Key", request.GetChannelKey().ChannelKey)
-		for _, header := range request.CustomHeader {
+		req.Header.Set("X-Goog-Api-Key", key)
+		for _, header := range customHeader {
 			if header.HeaderKey != "" {
 				req.Header.Set(header.HeaderKey, header.HeaderValue)
 			}
@@ -129,13 +127,13 @@ func fetchGeminiModels(client *http.Client, ctx context.Context, request model.C
 		pageToken = result.NextPageToken
 	}
 	if len(allModels) == 0 {
-		return fetchOpenAIModels(client, ctx, request)
+		return fetchOpenAIModels(client, ctx, baseURL, key, customHeader)
 	}
 	return allModels, nil
 }
 
 // refer: https://platform.claude.com/docs
-func fetchAnthropicModels(client *http.Client, ctx context.Context, request model.Channel) ([]string, error) {
+func fetchAnthropicModels(client *http.Client, ctx context.Context, baseURL string, key string, customHeader []model.CustomHeader) ([]string, error) {
 
 	var allModels []string
 	var afterID string
@@ -144,17 +142,16 @@ func fetchAnthropicModels(client *http.Client, ctx context.Context, request mode
 		req, _ := http.NewRequestWithContext(
 			ctx,
 			http.MethodGet,
-			request.GetBaseUrl()+"/models",
+			baseURL+"/models",
 			nil,
 		)
-		req.Header.Set("X-Api-Key", request.GetChannelKey().ChannelKey)
+		req.Header.Set("X-Api-Key", key)
 		req.Header.Set("Anthropic-Version", "2023-06-01")
-		for _, header := range request.CustomHeader {
+		for _, header := range customHeader {
 			if header.HeaderKey != "" {
 				req.Header.Set(header.HeaderKey, header.HeaderValue)
 			}
 		}
-		// 设置多页参数
 		q := req.URL.Query()
 
 		if afterID != "" {
@@ -185,7 +182,7 @@ func fetchAnthropicModels(client *http.Client, ctx context.Context, request mode
 		afterID = result.LastID
 	}
 	if len(allModels) == 0 {
-		return fetchOpenAIModels(client, ctx, request)
+		return fetchOpenAIModels(client, ctx, baseURL, key, customHeader)
 	}
 	return allModels, nil
 }

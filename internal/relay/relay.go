@@ -95,20 +95,27 @@ func Handler(inboundType inbound.InboundType, c *gin.Context) {
 			continue
 		}
 
+		// 端点匹配
+		endpoint, _ := channel.MatchEndpoint(inboundType)
+		if endpoint == nil {
+			iter.Skip(channel.ID, 0, channel.Name, "no matching endpoint")
+			continue
+		}
+
 		// 出站适配器
-		outAdapter := outbound.Get(channel.Type)
+		outAdapter := outbound.Get(endpoint.Type)
 		if outAdapter == nil {
-			iter.Skip(channel.ID, 0, channel.Name, fmt.Sprintf("unsupported channel type: %d", channel.Type))
+			iter.Skip(channel.ID, 0, channel.Name, fmt.Sprintf("unsupported endpoint type: %d", endpoint.Type))
 			continue
 		}
 
 		// 类型兼容性检查
-		if internalRequest.IsEmbeddingRequest() && !outbound.IsEmbeddingChannelType(channel.Type) {
-			iter.Skip(channel.ID, 0, channel.Name, "channel type not compatible with embedding request")
+		if internalRequest.IsEmbeddingRequest() && !outbound.IsEmbeddingChannelType(endpoint.Type) {
+			iter.Skip(channel.ID, 0, channel.Name, "endpoint type not compatible with embedding request")
 			continue
 		}
-		if internalRequest.IsChatRequest() && !outbound.IsChatChannelType(channel.Type) {
-			iter.Skip(channel.ID, 0, channel.Name, "channel type not compatible with chat request")
+		if internalRequest.IsChatRequest() && !outbound.IsChatChannelType(endpoint.Type) {
+			iter.Skip(channel.ID, 0, channel.Name, "endpoint type not compatible with chat request")
 			continue
 		}
 
@@ -150,6 +157,7 @@ func Handler(inboundType inbound.InboundType, c *gin.Context) {
 				relayRequest:         req,
 				outAdapter:           outAdapter,
 				channel:              channel,
+				endpoint:             endpoint,
 				usedKey:              usedKey,
 				firstTokenTimeOutSec: group.FirstTokenTimeOut,
 			}
@@ -271,7 +279,7 @@ func parseRequest(inboundType inbound.InboundType, c *gin.Context) (*model.Inter
 func (ra *relayAttempt) forward() (int, error) {
 	ctx := ra.c.Request.Context()
 
-	if ra.channel != nil && ra.channel.Type != outbound.OutboundTypeAnthropic {
+	if ra.endpoint != nil && ra.endpoint.Type != outbound.OutboundTypeAnthropic {
 		ra.internalRequest.Metadata = nil
 	}
 
@@ -279,7 +287,7 @@ func (ra *relayAttempt) forward() (int, error) {
 	outboundRequest, err := ra.outAdapter.TransformRequest(
 		ctx,
 		ra.internalRequest,
-		ra.channel.GetBaseUrl(),
+		ra.endpoint.BaseUrl,
 		ra.usedKey.ChannelKey,
 	)
 	if err != nil {

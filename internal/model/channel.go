@@ -3,6 +3,7 @@ package model
 import (
 	"time"
 
+	"github.com/gclm/octopus/internal/transformer/inbound"
 	"github.com/gclm/octopus/internal/transformer/outbound"
 )
 
@@ -15,28 +16,28 @@ const (
 	AutoGroupTypeRegex AutoGroupType = 3 //正则匹配
 )
 
-type Channel struct {
-	ID            int                   `json:"id" gorm:"primaryKey"`
-	Name          string                `json:"name" gorm:"unique;not null"`
-	Type          outbound.OutboundType `json:"type"`
-	Enabled       bool                  `json:"enabled" gorm:"default:true"`
-	BaseUrls      []BaseUrl             `json:"base_urls" gorm:"serializer:json"`
-	Keys          []ChannelKey          `json:"keys" gorm:"foreignKey:ChannelID"`
-	Model         string                `json:"model"`
-	CustomModel   string                `json:"custom_model"`
-	Proxy         bool                  `json:"proxy" gorm:"default:false"`
-	AutoSync      bool                  `json:"auto_sync" gorm:"default:false"`
-	AutoGroup     AutoGroupType         `json:"auto_group" gorm:"default:0"`
-	CustomHeader  []CustomHeader        `json:"custom_header" gorm:"serializer:json"`
-	ParamOverride *string               `json:"param_override"`
-	ChannelProxy  *string               `json:"channel_proxy"`
-	Stats         *StatsChannel         `json:"stats,omitempty" gorm:"foreignKey:ChannelID"`
-	MatchRegex    *string               `json:"match_regex"`
+type Endpoint struct {
+	Type    outbound.OutboundType `json:"type"`
+	BaseUrl string                `json:"base_url"`
+	Enabled bool                  `json:"enabled"`
 }
 
-type BaseUrl struct {
-	URL   string `json:"url"`
-	Delay int    `json:"delay"`
+type Channel struct {
+	ID            int                    `json:"id" gorm:"primaryKey"`
+	Name          string                 `json:"name" gorm:"unique;not null"`
+	Endpoints     []Endpoint             `json:"endpoints" gorm:"serializer:json"`
+	Keys          []ChannelKey           `json:"keys" gorm:"foreignKey:ChannelID"`
+	Model         string                 `json:"model"`
+	CustomModel   string                 `json:"custom_model"`
+	Enabled       bool                   `json:"enabled" gorm:"default:true"`
+	Proxy         bool                   `json:"proxy" gorm:"default:false"`
+	AutoSync      bool                   `json:"auto_sync" gorm:"default:false"`
+	AutoGroup     AutoGroupType          `json:"auto_group" gorm:"default:0"`
+	CustomHeader  []CustomHeader         `json:"custom_header" gorm:"serializer:json"`
+	ParamOverride *string                `json:"param_override"`
+	ChannelProxy  *string                `json:"channel_proxy"`
+	Stats         *StatsChannel          `json:"stats,omitempty" gorm:"foreignKey:ChannelID"`
+	MatchRegex    *string                `json:"match_regex"`
 }
 
 type CustomHeader struct {
@@ -59,9 +60,8 @@ type ChannelKey struct {
 type ChannelUpdateRequest struct {
 	ID            int                    `json:"id" binding:"required"`
 	Name          *string                `json:"name,omitempty"`
-	Type          *outbound.OutboundType `json:"type,omitempty"`
+	Endpoints     *[]Endpoint            `json:"endpoints,omitempty"`
 	Enabled       *bool                  `json:"enabled,omitempty"`
-	BaseUrls      *[]BaseUrl             `json:"base_urls,omitempty"`
 	Model         *string                `json:"model,omitempty"`
 	CustomModel   *string                `json:"custom_model,omitempty"`
 	Proxy         *bool                  `json:"proxy,omitempty"`
@@ -92,33 +92,66 @@ type ChannelKeyUpdateRequest struct {
 
 // ChannelFetchModelRequest is used by /channel/fetch-model (not persisted).
 type ChannelFetchModelRequest struct {
-	Type    outbound.OutboundType `json:"type" binding:"required"`
-	BaseURL string                `json:"base_url" binding:"required"`
-	Key     string                `json:"key" binding:"required"`
-	Proxy   bool                  `json:"proxy"`
+	Endpoints     []Endpoint     `json:"endpoints" binding:"required"`
+	Key           string         `json:"key" binding:"required"`
+	Proxy         bool           `json:"proxy"`
+	CustomHeader  []CustomHeader `json:"custom_header,omitempty"`
 }
 
+func inboundToOutbound(inType inbound.InboundType) outbound.OutboundType {
+	switch inType {
+	case inbound.InboundTypeOpenAIChat:
+		return outbound.OutboundTypeOpenAIChat
+	case inbound.InboundTypeOpenAIResponse:
+		return outbound.OutboundTypeOpenAIResponse
+	case inbound.InboundTypeAnthropic:
+		return outbound.OutboundTypeAnthropic
+	case inbound.InboundTypeGemini:
+		return outbound.OutboundTypeGemini
+	case inbound.InboundTypeOpenAIEmbedding:
+		return outbound.OutboundTypeOpenAIEmbedding
+	default:
+		return outbound.OutboundTypeOpenAIChat
+	}
+}
+
+// MatchEndpoint 根据 inbound 协议类型匹配最佳 endpoint
+// 返回 (endpoint, exactMatch)
+// exactMatch=true 表示协议完全匹配，无需转换
+func (c *Channel) MatchEndpoint(inboundType inbound.InboundType) (*Endpoint, bool) {
+	if c == nil {
+		return nil, false
+	}
+	outboundType := inboundToOutbound(inboundType)
+
+	// 1. 精确匹配：入站协议 == 出站协议，零转换
+	for i := range c.Endpoints {
+		if c.Endpoints[i].Enabled && c.Endpoints[i].Type == outboundType {
+			return &c.Endpoints[i], true
+		}
+	}
+
+	// 2. 兼容匹配：取第一个 enabled 的 endpoint（需协议转换）
+	for i := range c.Endpoints {
+		if c.Endpoints[i].Enabled {
+			return &c.Endpoints[i], false
+		}
+	}
+
+	return nil, false
+}
+
+// GetBaseUrl 返回第一个 enabled endpoint 的 base_url
 func (c *Channel) GetBaseUrl() string {
-	if c == nil || len(c.BaseUrls) == 0 {
+	if c == nil {
 		return ""
 	}
-
-	bestURL := ""
-	bestDelay := 0
-	bestSet := false
-
-	for _, bu := range c.BaseUrls {
-		if bu.URL == "" {
-			continue
-		}
-		if !bestSet || bu.Delay < bestDelay {
-			bestURL = bu.URL
-			bestDelay = bu.Delay
-			bestSet = true
+	for _, ep := range c.Endpoints {
+		if ep.Enabled && ep.BaseUrl != "" {
+			return ep.BaseUrl
 		}
 	}
-
-	return bestURL
+	return ""
 }
 
 // KeyFilter 用于过滤 key 的函数类型
