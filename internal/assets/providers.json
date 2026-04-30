@@ -27,14 +27,14 @@
     "name": "百炼 Coding Plan",
     "endpoints": [
       {"type": 0, "base_url": "https://coding.dashscope.aliyuncs.com/v1"},
-      {"type": 2, "base_url": "https://coding.dashscope.aliyuncs.com/apps/anthropic"}
+      {"type": 2, "base_url": "https://coding.dashscope.aliyuncs.com/apps/anthropic/v1"}
     ]
   },
   {
     "name": "GLM Coding Plan",
     "endpoints": [
       {"type": 0, "base_url": "https://open.bigmodel.cn/api/coding/paas/v4"},
-      {"type": 2, "base_url": "https://open.bigmodel.cn/api/anthropic"}
+      {"type": 2, "base_url": "https://open.bigmodel.cn/api/anthropic/v1"}
     ]
   },
   {
@@ -42,6 +42,13 @@
     "endpoints": [
       {"type": 0, "base_url": "https://api.minimaxi.com/v1"},
       {"type": 2, "base_url": "https://api.minimaxi.com/anthropic"}
+    ]
+  },
+  {
+    "name": "MiMo Token Plan",
+    "endpoints": [
+      {"type": 0, "base_url": "https://token-plan-cn.xiaomimimo.com/v1"},
+      {"type": 2, "base_url": "https://token-plan-cn.xiaomimimo.com/anthropic/v1"}
     ]
   },
   {

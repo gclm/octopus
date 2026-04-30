@@ -16,9 +16,9 @@ func init() {
 
 // codingPlanAnthropicURLs 已知 Coding Plan 渠道的 base_url → Anthropic endpoint URL 映射
 var codingPlanAnthropicURLs = map[string]string{
-	"https://coding.dashscope.aliyuncs.com/v1":    "https://coding.dashscope.aliyuncs.com/apps/anthropic",
-	"https://open.bigmodel.cn/api/coding/paas/v4": "https://open.bigmodel.cn/api/anthropic",
-	"https://api.minimaxi.com/v1":                  "https://api.minimaxi.com/anthropic",
+	"https://coding.dashscope.aliyuncs.com/v1":    "https://coding.dashscope.aliyuncs.com/apps/anthropic/v1",
+	"https://open.bigmodel.cn/api/coding/paas/v4": "https://open.bigmodel.cn/api/anthropic/v1",
+	"https://api.minimaxi.com/v1":                  "https://api.minimaxi.com/anthropic/v1",
 }
 
 // 003: 将 channels.type + channels.base_urls 合并为 channels.endpoints (JSON)
