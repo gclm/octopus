@@ -1,0 +1,26 @@
+[Unit]
+Description=Octopus - LLM API Aggregation Service
+After=network.target
+
+[Service]
+Type=simple
+User=octopus
+Group=octopus
+WorkingDirectory=/opt/octopus
+ExecStart=/opt/octopus/octopus start
+Restart=on-failure
+RestartSec=5
+
+# 安全加固
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/octopus/data
+
+# 日志输出到 journalctl
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=octopus
+
+[Install]
+WantedBy=multi-user.target
