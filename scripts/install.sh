@@ -99,7 +99,6 @@ download_binary() {
     local github_url="https://github.com/${REPO}/releases/download/${version}/${filename}"
     local tmp_dir
     tmp_dir=$(mktemp -d)
-    trap 'rm -rf "$tmp_dir"' EXIT
 
     info "下载 ${filename}..."
     if curl -fSL --progress-bar --connect-timeout 15 --max-time 600 \
@@ -109,11 +108,13 @@ download_binary() {
         -o "${tmp_dir}/${filename}" "$github_url"; then
         ok "直连下载成功"
     else
+        rm -rf "$tmp_dir"
         die "下载失败 (镜像与直连均不可用)"
     fi
 
     info "解压 ${filename}..."
     if ! unzip -o -q "${tmp_dir}/${filename}" -d "$tmp_dir"; then
+        rm -rf "$tmp_dir"
         die "解压失败"
     fi
 
@@ -121,6 +122,7 @@ download_binary() {
     mkdir -p "$INSTALL_DIR"
     cp "${tmp_dir}/${APP_NAME}" "${INSTALL_DIR}/${APP_NAME}"
     chmod +x "${INSTALL_DIR}/${APP_NAME}"
+    rm -rf "$tmp_dir"
     ok "二进制文件安装完成"
 }
 
@@ -216,8 +218,7 @@ start_service() {
     systemctl daemon-reload
     systemctl enable --now "$APP_NAME"
     ok "服务已启动并设为开机自启"
-    echo ""
-    systemctl status "$APP_NAME" --no-pager || true
+    systemctl status "$APP_NAME" --no-pager -l || true
 }
 
 # =============================================================================
