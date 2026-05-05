@@ -1,10 +1,12 @@
 package relay
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"slices"
 	"strings"
@@ -252,28 +254,32 @@ func (ra *relayAttempt) attempt() attemptResult {
 			RequestSuccess: 1,
 		})
 
-			// 熔断器：记录成功
-            balancer.RecordSuccess(ra.channel.ID, ra.usedKey.ID, ra.internalRequest.Model)
-            // 健康分：记录成功
-            balancer.RecordHealthSuccess(ra.channel.ID, ra.internalRequest.Model, span.Duration().Milliseconds())
+		// 熔断器：记录成功
+		balancer.RecordSuccess(ra.channel.ID, ra.usedKey.ID, ra.internalRequest.Model)
+		// 健康分：记录成功
+		balancer.RecordHealthSuccess(ra.channel.ID, ra.internalRequest.Model, span.Duration().Milliseconds())
 
-            return attemptResult{Success: true}
-        }
+		ra.metrics.ParamOverride = paramOverrideValue(ra.channel.ParamOverride)
 
-        // ====== 失败 ======
-        op.ChannelKeyUpdate(ra.usedKey)
-        span.End(dbmodel.AttemptFailed, statusCode, fwdErr.Error())
+		return attemptResult{Success: true}
+	}
 
-        // Channel 维度统计
-        op.StatsChannelUpdate(ra.channel.ID, dbmodel.StatsMetrics{
-                WaitTime:      span.Duration().Milliseconds(),
-                RequestFailed: 1,
-        })
+	// ====== 失败 ======
+	op.ChannelKeyUpdate(ra.usedKey)
+	span.End(dbmodel.AttemptFailed, statusCode, fwdErr.Error())
 
-        // 熔断器：记录失败
-        balancer.RecordFailure(ra.channel.ID, ra.usedKey.ID, ra.internalRequest.Model)
-        // 健康分:记录失败
-        balancer.RecordHealthFailure(ra.channel.ID, ra.internalRequest.Model)
+	// Channel 维度统计
+	op.StatsChannelUpdate(ra.channel.ID, dbmodel.StatsMetrics{
+		WaitTime:      span.Duration().Milliseconds(),
+		RequestFailed: 1,
+	})
+
+	// 熔断器：记录失败
+	balancer.RecordFailure(ra.channel.ID, ra.usedKey.ID, ra.internalRequest.Model)
+	// 健康分:记录失败
+	balancer.RecordHealthFailure(ra.channel.ID, ra.internalRequest.Model)
+
+	ra.metrics.ParamOverride = paramOverrideValue(ra.channel.ParamOverride)
 
 	writtenBefore := ra.c.Writer.Written()
 	if writtenBefore {
@@ -331,6 +337,36 @@ func (ra *relayAttempt) forward() (int, error) {
 	if err != nil {
 		log.Warnf("failed to create request: %v", err)
 		return 0, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// 应用 ParamOverride 到请求体
+	if ra.channel.ParamOverride != nil && *ra.channel.ParamOverride != "" {
+		body, err := io.ReadAll(outboundRequest.Body)
+		if err != nil {
+			return 0, fmt.Errorf("failed to read body: %w", err)
+		}
+
+		var bodyMap map[string]any
+		if err := json.Unmarshal(body, &bodyMap); err != nil {
+			log.Warnf("failed to unmarshal request body: %v, skipping param_override", err)
+			outboundRequest.Body = io.NopCloser(bytes.NewBuffer(body))
+		} else {
+			var override map[string]any
+			if err := json.Unmarshal([]byte(*ra.channel.ParamOverride), &override); err != nil {
+				log.Warnf("failed to unmarshal param_override: %v, skipping", err)
+				outboundRequest.Body = io.NopCloser(bytes.NewBuffer(body))
+			} else {
+				maps.Copy(bodyMap, override)
+				modifiedBody, err := json.Marshal(bodyMap)
+				if err != nil {
+					log.Warnf("failed to marshal modified body: %v, skipping param_override", err)
+					outboundRequest.Body = io.NopCloser(bytes.NewBuffer(body))
+				} else {
+					outboundRequest.Body = io.NopCloser(bytes.NewBuffer(modifiedBody))
+					outboundRequest.ContentLength = int64(len(modifiedBody))
+				}
+			}
+		}
 	}
 
 	// 复制请求头
@@ -600,4 +636,11 @@ func extractUpstreamError(body []byte) string {
 	}
 
 	return string(body)
+}
+
+func paramOverrideValue(ptr *string) string {
+	if ptr == nil || *ptr == "" {
+		return ""
+	}
+	return *ptr
 }

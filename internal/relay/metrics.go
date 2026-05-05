@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"strings"
 	"time"
 
@@ -32,6 +33,9 @@ type RelayMetrics struct {
 	// 统计指标
 	ActualModel string
 	Stats       model.StatsMetrics
+
+	// 参数覆盖
+	ParamOverride string
 }
 
 func NewRelayMetrics(apiKeyID int, requestModel string, req *transformerModel.InternalLLMRequest, requestID, clientRequestID string) *RelayMetrics {
@@ -178,8 +182,30 @@ func (m *RelayMetrics) saveLog(ctx context.Context, err error, duration time.Dur
 
 	// 请求内容
 	if m.InternalRequest != nil {
-		if reqJSON, jsonErr := json.Marshal(m.InternalRequest); jsonErr == nil {
+		reqJSON, jsonErr := json.Marshal(m.InternalRequest)
+		if jsonErr != nil {
 			relayLog.RequestContent = string(reqJSON)
+			return
+		}
+		if m.ParamOverride == "" {
+			relayLog.RequestContent = string(reqJSON)
+			return
+		}
+		var reqMap map[string]any
+		if err := json.Unmarshal(reqJSON, &reqMap); err != nil {
+			relayLog.RequestContent = string(reqJSON)
+			return
+		}
+		var override map[string]any
+		if err := json.Unmarshal([]byte(m.ParamOverride), &override); err != nil {
+			relayLog.RequestContent = string(reqJSON)
+			return
+		}
+		maps.Copy(reqMap, override)
+		if finalJSON, err := json.Marshal(reqMap); err != nil {
+			relayLog.RequestContent = string(reqJSON)
+		} else {
+			relayLog.RequestContent = string(finalJSON)
 		}
 	}
 
