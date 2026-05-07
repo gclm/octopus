@@ -2,9 +2,12 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gclm/octopus/internal/helper"
@@ -54,6 +57,10 @@ func init() {
 		AddRoute(
 			router.NewRoute("/last-sync-time", http.MethodGet).
 				Handle(getLastSyncTime),
+		).
+		AddRoute(
+			router.NewRoute("/test-stream", http.MethodPost).
+				Handle(testChannelStream),
 		)
 }
 
@@ -175,4 +182,39 @@ func syncChannel(c *gin.Context) {
 func getLastSyncTime(c *gin.Context) {
 	time := task.GetLastSyncModelsTime()
 	resp.Success(c, time)
+}
+
+func writeSSEHeaders(c *gin.Context) {
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Header("X-Accel-Buffering", "no")
+}
+
+func sendSSEEvent(c *gin.Context, mu *sync.Mutex, event helper.StreamEvent) {
+	data, _ := json.Marshal(event)
+	mu.Lock()
+	defer mu.Unlock()
+	c.Writer.Write([]byte(fmt.Sprintf("data: %s\n\n", data)))
+	c.Writer.Flush()
+}
+
+func testChannelStream(c *gin.Context) {
+	var cfg helper.ChannelTestConfig
+	if err := c.ShouldBindJSON(&cfg); err != nil {
+		resp.Error(c, http.StatusBadRequest, resp.ErrInvalidJSON)
+		return
+	}
+
+	writeSSEHeaders(c)
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Minute)
+	defer cancel()
+
+	var writeMu sync.Mutex
+	if err := helper.TestChannelConfigStream(ctx, cfg, func(event helper.StreamEvent) {
+		sendSSEEvent(c, &writeMu, event)
+	}); err != nil {
+		sendSSEEvent(c, &writeMu, helper.StreamEvent{Type: helper.StreamEventError, Error: err.Error()})
+	}
 }

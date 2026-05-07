@@ -9,9 +9,10 @@ import {
     Activity,
     TrendingUp,
     Globe,
-    Key
+    Key,
+    FlaskConical,
 } from 'lucide-react';
-import { useUpdateChannel, useDeleteChannel, type Channel, type UpdateChannelRequest, OutboundType } from '@/api/endpoints/channel';
+import { useUpdateChannel, useDeleteChannel, type Channel, type UpdateChannelRequest, OutboundType, buildTestPreviewRequest } from '@/api/endpoints/channel';
 import {
     MorphingDialogTitle,
     MorphingDialogDescription,
@@ -35,7 +36,7 @@ const endpointTypeLabels: Record<number, string> = {
     [OutboundType.OpenAIEmbedding]: 'OpenAI Embedding',
 };
 
-export function CardContent({ channel, stats }: { channel: Channel; stats: StatsMetricsFormatted }) {
+export function CardContent({ channel, stats, onTest }: { channel: Channel; stats: StatsMetricsFormatted; onTest: (body: object) => void }) {
     const { setIsOpen } = useMorphingDialog();
     const updateChannel = useUpdateChannel();
     const deleteChannel = useDeleteChannel();
@@ -165,6 +166,33 @@ export function CardContent({ channel, stats }: { channel: Channel; stats: Stats
         setTimeout(() => {
             deleteChannel.mutate(channel.id);
         }, 300);
+    };
+
+    const handleTest = () => {
+        if (!isEditing) {
+            const endpoints = (channel.endpoints ?? [])
+                .filter((ep) => ep.base_url?.trim())
+                .map((ep) => ({ ...ep, base_url: ep.base_url.trim() }));
+            const keys = channel.keys
+                .filter((k) => k.enabled && k.channel_key?.trim())
+                .map((k) => ({ enabled: k.enabled, channel_key: k.channel_key.trim() }));
+            if (endpoints.length > 0 && keys.length > 0) {
+                onTest({
+                    endpoints,
+                    keys,
+                    model: channel.model,
+                    custom_model: channel.custom_model,
+                    proxy: channel.proxy,
+                    custom_header: channel.custom_header ?? [],
+                    channel_proxy: channel.channel_proxy,
+                    param_override: channel.param_override,
+                });
+            }
+            return;
+        }
+        const body = buildTestPreviewRequest(formData);
+        if (!body) return;
+        onTest(body);
     };
 
     return (
@@ -427,13 +455,21 @@ export function CardContent({ channel, stats }: { channel: Channel; stats: Stats
                             </div>
 
                             {/* 操作按钮 */}
-                            <div className="grid gap-3 sm:grid-cols-2 pt-2">
+                            <div className="grid gap-3 sm:grid-cols-3 pt-2">
                                 <Button
                                     onClick={() => (isConfirmingDelete ? setIsConfirmingDelete(false) : setIsEditing(true))}
                                     variant={isConfirmingDelete ? 'secondary' : 'default'}
                                     className="w-full rounded-2xl h-12"
                                 >
                                     {isConfirmingDelete ? t('actions.cancel') : t('actions.edit')}
+                                </Button>
+                                <Button
+                                    onClick={handleTest}
+                                    variant="secondary"
+                                    className="w-full rounded-2xl h-12"
+                                >
+                                    <FlaskConical className="size-4" />
+                                    {t('actions.test')}
                                 </Button>
                                 <Button
                                     onClick={handleDeleteClick}
@@ -462,6 +498,8 @@ export function CardContent({ channel, stats }: { channel: Channel; stats: Stats
                                 onCancel={() => setIsEditing(false)}
                                 cancelText={t('actions.cancel')}
                                 idPrefix="channel"
+                                onTest={handleTest}
+                                testText={t('actions.test')}
                             />
                         </TabsContent>
                     </TabsContents>

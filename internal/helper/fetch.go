@@ -3,6 +3,8 @@ package helper
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"strings"
 
@@ -11,7 +13,11 @@ import (
 )
 
 func FetchModels(ctx context.Context, endpoints []model.Endpoint, key string, proxy bool, customHeader []model.CustomHeader) ([]string, error) {
-	channel := &model.Channel{Proxy: proxy, CustomHeader: customHeader}
+	return FetchModelsWithChannelProxy(ctx, endpoints, key, proxy, nil, customHeader)
+}
+
+func FetchModelsWithChannelProxy(ctx context.Context, endpoints []model.Endpoint, key string, proxy bool, channelProxy *string, customHeader []model.CustomHeader) ([]string, error) {
+	channel := &model.Channel{Proxy: proxy, ChannelProxy: channelProxy, CustomHeader: customHeader}
 	client, err := ChannelHttpClient(channel)
 	if err != nil {
 		return nil, err
@@ -19,6 +25,7 @@ func FetchModels(ctx context.Context, endpoints []model.Endpoint, key string, pr
 
 	seen := make(map[string]struct{})
 	var allModels []string
+	var lastErr error
 
 	for _, ep := range endpoints {
 		if !ep.Enabled || ep.BaseUrl == "" {
@@ -34,6 +41,7 @@ func FetchModels(ctx context.Context, endpoints []model.Endpoint, key string, pr
 			models, err = fetchOpenAIModels(client, ctx, ep.BaseUrl, key, customHeader)
 		}
 		if err != nil {
+			lastErr = err
 			continue
 		}
 		for _, m := range models {
@@ -42,6 +50,9 @@ func FetchModels(ctx context.Context, endpoints []model.Endpoint, key string, pr
 				allModels = append(allModels, m)
 			}
 		}
+	}
+	if len(allModels) == 0 && lastErr != nil {
+		return nil, lastErr
 	}
 	return allModels, nil
 }
@@ -66,6 +77,11 @@ func fetchOpenAIModels(client *http.Client, ctx context.Context, baseURL string,
 		return nil, err
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4*1024))
+		return nil, fmt.Errorf("%s/models 返回 HTTP %d: %s", baseURL, resp.StatusCode, strings.TrimSpace(string(body)))
+	}
 
 	var result model.OpenAIModelList
 
@@ -109,6 +125,11 @@ func fetchGeminiModels(client *http.Client, ctx context.Context, baseURL string,
 			return nil, err
 		}
 		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(io.LimitReader(resp.Body, 4*1024))
+			return nil, fmt.Errorf("%s/models 返回 HTTP %d: %s", baseURL, resp.StatusCode, strings.TrimSpace(string(body)))
+		}
 
 		var result model.GeminiModelList
 
@@ -164,6 +185,11 @@ func fetchAnthropicModels(client *http.Client, ctx context.Context, baseURL stri
 			return nil, err
 		}
 		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(io.LimitReader(resp.Body, 4*1024))
+			return nil, fmt.Errorf("%s/models 返回 HTTP %d: %s", baseURL, resp.StatusCode, strings.TrimSpace(string(body)))
+		}
 
 		var result model.AnthropicModelList
 

@@ -5,13 +5,16 @@ import {
     MorphingDialogDescription,
     useMorphingDialog,
 } from '@/components/ui/morphing-dialog';
-import { useCreateChannel, OutboundType, AutoGroupType } from '@/api/endpoints/channel';
+import { useCreateChannel, OutboundType, AutoGroupType, buildTestPreviewRequest } from '@/api/endpoints/channel';
 import { useTranslations } from 'next-intl';
 import { ChannelForm, type ChannelFormData } from './Form';
+import { TestDialog } from './TestDialog';
+import { API_BASE_URL } from '@/api/client';
 
 export function CreateDialogContent() {
     const { setIsOpen } = useMorphingDialog();
     const createChannel = useCreateChannel();
+    const [testBody, setTestBody] = useState<object | null>(null);
     const [formData, setFormData] = useState<ChannelFormData>({
         name: '',
         endpoints: [{ type: OutboundType.OpenAIChat, base_url: '', enabled: true }],
@@ -28,6 +31,7 @@ export function CreateDialogContent() {
         match_regex: '',
     });
     const t = useTranslations('channel.create');
+    const tActions = useTranslations('channel.detail.actions');
 
     const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
@@ -85,6 +89,12 @@ export function CreateDialogContent() {
             });
     };
 
+    const handleTest = () => {
+        const body = buildTestPreviewRequest(formData);
+        if (!body) return;
+        setTestBody(body);
+    };
+
     return (
         <div className="w-screen max-w-full md:max-w-xl h-full min-h-0 flex flex-col">
             <MorphingDialogTitle className="shrink-0">
@@ -109,8 +119,17 @@ export function CreateDialogContent() {
                     submitText={t('submit')}
                     pendingText={t('submitting')}
                     idPrefix="new-channel"
+                    onTest={handleTest}
+                    testText={tActions('test')}
                 />
             </MorphingDialogDescription>
+
+            <TestDialog
+                open={testBody !== null}
+                onOpenChange={(open) => { if (!open) setTestBody(null); }}
+                streamUrl={`${API_BASE_URL}/api/v1/channel/test-stream`}
+                body={testBody}
+            />
         </div>
     );
 }

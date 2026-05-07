@@ -522,7 +522,31 @@
                 "saving": "Saving...",
                 "delete": "Delete",
                 "confirmDelete": "Confirm Delete",
-                "deleting": "Deleting..."
+                "deleting": "Deleting...",
+                "test": "Test",
+                "testing": "Testing..."
+            },
+            "test": {
+                "title": "Test Results",
+                "successLabel": "passed",
+                "failedLabel": "failed",
+                "progress": "Progress",
+                "endpoint": "Endpoint",
+                "unknownEndpoint": "Unknown endpoint",
+                "avgFirstToken": "Avg First Token",
+                "avgResponse": "Avg Response",
+                "model": "Model",
+                "status": "Status",
+                "success": "Passed",
+                "failed": "Failed",
+                "errorDetail": "Error Detail",
+                "firstTokenTime": "First Token",
+                "responseTime": "Response Time",
+                "pending": "Pending",
+                "loading": "Loading models...",
+                "readStreamFailed": "Unable to read response stream",
+                "unknownError": "Unknown error",
+                "requestFailed": "Test request failed"
             }
         },
         "create": {

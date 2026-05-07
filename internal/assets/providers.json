@@ -45,13 +45,6 @@
     ]
   },
   {
-    "name": "MiMo Token Plan",
-    "endpoints": [
-      {"type": 0, "base_url": "https://token-plan-cn.xiaomimimo.com/v1"},
-      {"type": 2, "base_url": "https://token-plan-cn.xiaomimimo.com/anthropic/v1"}
-    ]
-  },
-  {
     "name": "通用 Coding Plan",
     "endpoints": [
       {"type": 0, "base_url": ""},

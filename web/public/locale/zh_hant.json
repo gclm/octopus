@@ -522,7 +522,31 @@
                 "saving": "儲存中...",
                 "delete": "刪除",
                 "confirmDelete": "確認刪除",
-                "deleting": "刪除中..."
+                "deleting": "刪除中...",
+                "test": "測試",
+                "testing": "測試中..."
+            },
+            "test": {
+                "title": "測試結果",
+                "successLabel": "成功",
+                "failedLabel": "失敗",
+                "progress": "進度",
+                "endpoint": "端點",
+                "unknownEndpoint": "未知端點",
+                "avgFirstToken": "平均首字",
+                "avgResponse": "平均回應",
+                "model": "模型",
+                "status": "狀態",
+                "success": "成功",
+                "failed": "失敗",
+                "errorDetail": "錯誤詳情",
+                "firstTokenTime": "首字耗時",
+                "responseTime": "回應時間",
+                "pending": "等待中",
+                "loading": "載入模型列表...",
+                "readStreamFailed": "無法讀取回應串流",
+                "unknownError": "未知錯誤",
+                "requestFailed": "測試請求失敗"
             }
         },
         "create": {

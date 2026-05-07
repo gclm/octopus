@@ -60,6 +60,8 @@ export interface ChannelFormProps {
     onCancel?: () => void;
     cancelText?: string;
     idPrefix?: string;
+    onTest?: () => void;
+    testText?: string;
 }
 
 import {
@@ -79,6 +81,8 @@ export function ChannelForm({
     onCancel,
     cancelText,
     idPrefix = 'channel',
+    onTest,
+    testText,
 }: ChannelFormProps) {
     const t = useTranslations('channel.form');
 
@@ -633,7 +637,7 @@ export function ChannelForm({
                 </div>
             </div>
 
-            <div className={`flex flex-col gap-3 pt-2 ${onCancel ? 'sm:flex-row' : ''}`}>
+            <div className={`flex flex-col gap-3 pt-2 ${onCancel || onTest ? 'sm:flex-row' : ''}`}>
                 {onCancel && cancelText && (
                     <Button
                         type="button"
@@ -642,6 +646,16 @@ export function ChannelForm({
                         className="w-full sm:flex-1 rounded-2xl h-12"
                     >
                         {cancelText}
+                    </Button>
+                )}
+                {onTest && (
+                    <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={onTest}
+                        className="w-full sm:flex-1 rounded-2xl h-12"
+                    >
+                        {testText || 'Test'}
                     </Button>
                 )}
                 <Button

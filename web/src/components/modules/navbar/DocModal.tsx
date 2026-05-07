@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { Copy, Check, BookOpen, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -79,20 +79,16 @@ export function DocModal({ isOpen, onClose }: DocModalProps) {
         return configured || window.location.origin;
     }, []);
 
-    const curlCode = useMemo(
-        () => generateCurl(baseUrl, selectedApiKey, selectedModel, apiType),
-        [baseUrl, selectedApiKey, selectedModel, apiType]
-    );
-
     const groupOptions = useMemo(() => {
         return Array.from(new Set((groups ?? []).map((g) => g.name).filter(Boolean)));
     }, [groups]);
 
-    useEffect(() => {
-        if (selectedModel && !groupOptions.includes(selectedModel)) {
-            setSelectedModel('');
-        }
-    }, [groupOptions, selectedModel]);
+    const effectiveSelectedModel = groupOptions.includes(selectedModel) ? selectedModel : '';
+
+    const curlCode = useMemo(
+        () => generateCurl(baseUrl, selectedApiKey, effectiveSelectedModel, apiType),
+        [baseUrl, selectedApiKey, effectiveSelectedModel, apiType]
+    );
 
     const handleCopy = async () => {
         try {
@@ -174,7 +170,7 @@ export function DocModal({ isOpen, onClose }: DocModalProps) {
                                 </div>
                                 <div className="space-y-1">
                                     <label className="text-sm font-medium text-muted-foreground">{t('model')}</label>
-                                    <Select value={selectedModel} onValueChange={setSelectedModel}>
+                                    <Select value={effectiveSelectedModel} onValueChange={setSelectedModel}>
                                         <SelectTrigger className="rounded-xl">
                                             <SelectValue placeholder={t('selectModel')} />
                                         </SelectTrigger>

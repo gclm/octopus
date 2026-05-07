@@ -252,3 +252,55 @@ export function useSyncChannel() {
         },
     });
 }
+
+export type ModelTestResult = {
+    model: string;
+    base_url: string;
+    endpoint_type: OutboundType;
+    success: boolean;
+    response_time_ms: number;
+    first_token_time_ms: number;
+    error?: string;
+};
+
+export type TestPreviewRequest = {
+    endpoints: Endpoint[];
+    keys: Array<Pick<ChannelKey, 'enabled' | 'channel_key'>>;
+    model?: string;
+    custom_model?: string;
+    proxy?: boolean;
+    custom_header?: CustomHeader[];
+    param_override?: string | null;
+    channel_proxy?: string | null;
+};
+
+export function buildTestPreviewRequest(data: {
+    endpoints: Endpoint[];
+    keys: Array<{ enabled: boolean; channel_key: string }>;
+    model: string;
+    custom_model: string;
+    proxy: boolean;
+    custom_header?: CustomHeader[];
+    channel_proxy: string;
+    param_override: string;
+}): TestPreviewRequest | null {
+    const endpoints = data.endpoints
+        .filter((ep) => ep.base_url.trim())
+        .map((ep) => ({ ...ep, base_url: ep.base_url.trim() }));
+    const keys = data.keys
+        .filter((k) => k.enabled && k.channel_key.trim())
+        .map((k) => ({ enabled: k.enabled, channel_key: k.channel_key.trim() }));
+    if (endpoints.length === 0 || keys.length === 0) return null;
+    return {
+        endpoints,
+        keys,
+        model: data.model,
+        custom_model: data.custom_model,
+        proxy: data.proxy,
+        custom_header: data.custom_header
+            ?.map((h) => ({ header_key: h.header_key.trim(), header_value: h.header_value }))
+            .filter((h) => h.header_key && h.header_value !== '') || [],
+        channel_proxy: data.channel_proxy.trim(),
+        param_override: data.param_override.trim(),
+    };
+}

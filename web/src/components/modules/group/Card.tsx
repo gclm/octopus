@@ -75,8 +75,7 @@ export function GroupCard({ group }: { group: Group }) {
     const { data: modelChannels = [] } = useModelChannelList();
 
     const [confirmDelete, setConfirmDelete] = useState(false);
-    const [members, setMembers] = useState<SelectedMember[]>([]);
-    const isDragging = useRef(false);
+    const [members, setMembers] = useState<SelectedMember[] | null>(null);
     const weightTimerRef = useRef<NodeJS.Timeout | null>(null);
     const membersRef = useRef<SelectedMember[]>([]);
 
@@ -110,19 +109,20 @@ export function GroupCard({ group }: { group: Group }) {
         [group.items, channelNameByKey, enabledByKey]
     );
 
-    useEffect(() => {
-        if (!isDragging.current) setMembers([...displayMembers]);
-    }, [displayMembers]);
+    const visibleMembers = members ?? displayMembers;
 
     useEffect(() => {
-        membersRef.current = members;
-    }, [members]);
+        membersRef.current = visibleMembers;
+    }, [visibleMembers]);
 
     useEffect(() => {
         return () => { if (weightTimerRef.current) clearTimeout(weightTimerRef.current); };
     }, []);
 
-    const onSuccess = useCallback(() => toast.success(t('toast.updated')), [t]);
+    const onSuccess = useCallback(() => {
+        setMembers(null);
+        toast.success(t('toast.updated'));
+    }, [t]);
     const onError = useCallback((error: Error) => toast.error(t('toast.updateFailed'), { description: error.message }), [t]);
 
     // Avoid UI flicker: drag-reorder also uses the same mutation, so only "mode switch" should lock mode buttons.
@@ -141,8 +141,8 @@ export function GroupCard({ group }: { group: Group }) {
         return map;
     }, [group.items]);
 
-    const handleDragStart = useCallback(() => { isDragging.current = true; }, []);
-    const handleDragFinish = useCallback(() => { isDragging.current = false; }, []);
+    const handleDragStart = useCallback(() => {}, []);
+    const handleDragFinish = useCallback(() => {}, []);
 
     const handleDropReorder = useCallback((nextMembers: SelectedMember[]) => {
         const itemsToUpdate = nextMembers
@@ -157,12 +157,12 @@ export function GroupCard({ group }: { group: Group }) {
     }, [group.id, priorityByItemId, updateGroup, onSuccess, onError]);
 
     const handleRemoveMember = useCallback((id: string) => {
-        const member = members.find((m) => m.id === id);
+        const member = visibleMembers.find((m) => m.id === id);
         if (member?.item_id !== undefined) updateGroup.mutate({ id: group.id!, items_to_delete: [member.item_id] }, { onSuccess, onError });
-    }, [members, group.id, updateGroup, onSuccess, onError]);
+    }, [visibleMembers, group.id, updateGroup, onSuccess, onError]);
 
     const handleWeightChange = useCallback((id: string, weight: number) => {
-        setMembers((prev) => prev.map((m) => m.id === id ? { ...m, weight } : m));
+        setMembers((prev) => (prev ?? displayMembers).map((m) => m.id === id ? { ...m, weight } : m));
         if (weightTimerRef.current) clearTimeout(weightTimerRef.current);
         weightTimerRef.current = setTimeout(() => {
             const member = membersRef.current.find((m) => m.id === id);
@@ -174,7 +174,7 @@ export function GroupCard({ group }: { group: Group }) {
                 { onSuccess, onError }
             );
         }, 500);
-    }, [group.id, priorityByItemId, updateGroup, onSuccess, onError]);
+    }, [displayMembers, group.id, priorityByItemId, updateGroup, onSuccess, onError]);
 
     const handleSubmitEdit = useCallback((values: GroupEditorValues, onDone?: () => void) => {
         if (!group.id) return;
@@ -345,7 +345,7 @@ export function GroupCard({ group }: { group: Group }) {
 
             <section className="rounded-xl border border-border/50 bg-muted/30 overflow-hidden relative h-101">
                 <MemberList
-                    members={members}
+                    members={visibleMembers}
                     onReorder={setMembers}
                     onRemove={handleRemoveMember}
                     onWeightChange={handleWeightChange}

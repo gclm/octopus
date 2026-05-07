@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+
+	"github.com/gclm/octopus/internal/utils/log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -107,6 +109,7 @@ func (o *MessageOutbound) TransformResponse(ctx context.Context, response *http.
 	}
 
 	if len(anthropicResp.Content) == 0 {
+		log.Warnf("anthropic upstream returned empty content blocks, raw body: %s", string(body))
 		return nil, fmt.Errorf("upstream returned empty response: no content blocks")
 	}
 

@@ -8,6 +8,9 @@ import { CheckCircle2, DollarSign, Key, Layers, MessageSquare, XCircle } from 'l
 import { type StatsMetricsFormatted } from '@/api/endpoints/stats';
 import { type Channel, useEnableChannel } from '@/api/endpoints/channel';
 import { CardContent } from './CardContent';
+import { TestDialog } from './TestDialog';
+import { API_BASE_URL } from '@/api/client';
+import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/animate-ui/components/animate/tooltip';
 import { Switch } from '@/components/ui/switch';
@@ -20,6 +23,11 @@ export function Card({ channel, stats, layout = 'grid' }: { channel: Channel; st
     const tMetrics = useTranslations('channel.detail.metrics');
     const enableChannel = useEnableChannel();
     const isListLayout = layout === 'list';
+    const [testBody, setTestBody] = useState<object | null>(null);
+
+    const handleTest = (body: object) => {
+        setTestBody(body);
+    };
 
     const splitModels = (models: string) =>
         models
@@ -152,9 +160,17 @@ export function Card({ channel, stats, layout = 'grid' }: { channel: Channel; st
 
             <MorphingDialogContainer>
                 <MorphingDialogContent className="w-full md:max-w-xl bg-card text-card-foreground px-4 py-2 rounded-3xl max-h-[90vh] overflow-y-auto">
-                    <CardContent channel={channel} stats={stats} />
+                    <CardContent channel={channel} stats={stats} onTest={handleTest} />
                 </MorphingDialogContent>
             </MorphingDialogContainer>
+
+            <TestDialog
+                open={testBody !== null}
+                onOpenChange={(open) => { if (!open) setTestBody(null); }}
+                channelName={channel.name}
+                streamUrl={`${API_BASE_URL}/api/v1/channel/test-stream`}
+                body={testBody}
+            />
         </MorphingDialog>
     );
 }
