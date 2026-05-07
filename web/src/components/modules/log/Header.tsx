@@ -118,8 +118,8 @@ export function LogHeader({ models, onFilter }: LogHeaderProps) {
                 {/* 模型 */}
                 {models.length > 0 && (
                     <Select
-                        value={filters.model}
-                        onValueChange={(v) => setFilters({ ...filters, model: v || undefined })}
+                        value={filters.model || '__all__'}
+                        onValueChange={(v) => setFilters({ ...filters, model: v === '__all__' ? undefined : v })}
                     >
                         <SelectTrigger className={cn(
                             "h-8 w-36 rounded-xl text-xs border-border/70",
@@ -128,6 +128,7 @@ export function LogHeader({ models, onFilter }: LogHeaderProps) {
                             <SelectValue placeholder={t('log.filter.model')} />
                         </SelectTrigger>
                         <SelectContent>
+                            <SelectItem value="__all__">{t('log.filter.all')}</SelectItem>
                             {models.map((m) => (
                                 <SelectItem key={m} value={m}>{m}</SelectItem>
                             ))}
