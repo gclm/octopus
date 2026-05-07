@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { useLogs, type LogListParams } from '@/api/endpoints/log';
+import { useModelList } from '@/api/endpoints/model';
 import { LogCard } from './Item';
 import { LogHeader, type FilterValues } from './Header';
 import { Loader2 } from 'lucide-react';
@@ -39,12 +40,12 @@ export function Log() {
 
     const apiParams = useMemo(() => filterToApiParams(filters), [filters]);
     const { logs, hasMore, isLoading, isLoadingMore, loadMore } = useLogs({ pageSize: 20, filters: apiParams });
+    const { data: modelList } = useModelList();
 
-    // 提取唯一模型列表（用于筛选下拉框）
     const models = useMemo(() => {
-        const set = new Set(logs.map((l) => l.request_model_name));
-        return Array.from(set).sort();
-    }, [logs]);
+        if (!modelList) return [];
+        return modelList.map((m) => m.name).sort();
+    }, [modelList]);
 
     const handleFilter = useCallback((values: FilterValues) => {
         setFilters(values);

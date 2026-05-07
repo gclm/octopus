@@ -41,6 +41,22 @@ function formatDuration(ms: number): string {
     return `${(ms / 1000).toFixed(2)}s`;
 }
 
+function RequestIdBadge({ requestId, clientRequestId }: { requestId?: string; clientRequestId?: string }) {
+    const id = clientRequestId || requestId;
+    if (!id) return null;
+    return (
+        <span className="shrink-0 font-mono text-[10px] text-muted-foreground/70 bg-muted/50 rounded px-1.5 py-0.5 flex items-center gap-1" title={id}>
+            {id}
+            <CopyIconButton
+                text={id}
+                className="p-0 text-muted-foreground/60 hover:text-foreground transition-colors"
+                copyIconClassName="size-3"
+                checkIconClassName="size-3"
+            />
+        </span>
+    );
+}
+
 interface RetryBadgeWithTooltipProps {
     channelName: string;
     brandColor: string;
@@ -231,11 +247,7 @@ export function LogCard({ log }: { log: RelayLog }) {
                                 <span className="text-muted-foreground truncate" title={log.actual_model_name}>
                                     {log.actual_model_name}
                                 </span>
-                                {(log.request_id || log.client_request_id) && (
-                                    <span className="shrink-0 font-mono text-[10px] text-muted-foreground/70 bg-muted/50 rounded px-1.5 py-0.5 truncate max-w-[100px]" title={log.client_request_id || log.request_id}>
-                                        {(log.client_request_id || log.request_id || '').slice(0, 8)}
-                                    </span>
-                                )}
+                                <RequestIdBadge requestId={log.request_id} clientRequestId={log.client_request_id} />
                                 {log.attempts?.some(a => a.sticky) && (
                                     <Pin className="size-3.5 shrink-0 text-amber-500" />
                                 )}
@@ -308,6 +320,7 @@ export function LogCard({ log }: { log: RelayLog }) {
                                 </Badge>
                             )}
                             <span className="text-muted-foreground">{log.actual_model_name}</span>
+                            <RequestIdBadge requestId={log.request_id} clientRequestId={log.client_request_id} />
                             {log.attempts?.some(a => a.sticky) && (
                                 <Pin className="size-3.5 shrink-0 text-amber-500" />
                             )}

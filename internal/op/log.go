@@ -229,7 +229,7 @@ func RelayLogList(ctx context.Context, q *LogListQuery, page, pageSize int) ([]m
 		query = query.Where("request_model_name = ?", q.Model)
 	}
 	if q.ChannelID != nil {
-		query = query.Where("channel = ?", *q.ChannelID)
+		query = query.Where("channel_id = ?", *q.ChannelID)
 	}
 	if q.RequestID != "" {
 		query = query.Where("request_id = ? OR client_request_id = ?", q.RequestID, q.RequestID)

@@ -180,34 +180,7 @@ func (m *RelayMetrics) saveLog(ctx context.Context, err error, duration time.Dur
 		relayLog.Cost = m.Stats.InputCost + m.Stats.OutputCost
 	}
 
-	// 请求内容
-	if m.InternalRequest != nil {
-		reqJSON, jsonErr := json.Marshal(m.InternalRequest)
-		if jsonErr != nil {
-			relayLog.RequestContent = string(reqJSON)
-			return
-		}
-		if m.ParamOverride == "" {
-			relayLog.RequestContent = string(reqJSON)
-			return
-		}
-		var reqMap map[string]any
-		if err := json.Unmarshal(reqJSON, &reqMap); err != nil {
-			relayLog.RequestContent = string(reqJSON)
-			return
-		}
-		var override map[string]any
-		if err := json.Unmarshal([]byte(m.ParamOverride), &override); err != nil {
-			relayLog.RequestContent = string(reqJSON)
-			return
-		}
-		maps.Copy(reqMap, override)
-		if finalJSON, err := json.Marshal(reqMap); err != nil {
-			relayLog.RequestContent = string(reqJSON)
-		} else {
-			relayLog.RequestContent = string(finalJSON)
-		}
-	}
+	relayLog.RequestContent = m.buildRequestContent()
 
 	// 响应内容
 	if m.InternalResponse != nil {
@@ -231,6 +204,33 @@ func (m *RelayMetrics) saveLog(ctx context.Context, err error, duration time.Dur
 	if logErr := op.RelayLogAdd(ctx, relayLog); logErr != nil {
 		log.Warnf("failed to save relay log: %v", logErr)
 	}
+}
+
+func (m *RelayMetrics) buildRequestContent() string {
+	if m.InternalRequest == nil {
+		return ""
+	}
+	reqJSON, err := json.Marshal(m.InternalRequest)
+	if err != nil {
+		return string(reqJSON)
+	}
+	if m.ParamOverride == "" {
+		return string(reqJSON)
+	}
+	var reqMap map[string]any
+	if err := json.Unmarshal(reqJSON, &reqMap); err != nil {
+		return string(reqJSON)
+	}
+	var override map[string]any
+	if err := json.Unmarshal([]byte(m.ParamOverride), &override); err != nil {
+		return string(reqJSON)
+	}
+	maps.Copy(reqMap, override)
+	finalJSON, err := json.Marshal(reqMap)
+	if err != nil {
+		return string(reqJSON)
+	}
+	return string(finalJSON)
 }
 
 // filterResponseForLog 创建响应的浅拷贝，过滤掉 images、MultipleContent 中的图片数据和 Audio.Data 以减少存储压力

@@ -25,7 +25,7 @@ build-fe:
 	cp -r web/out static/out
 
 # 运行编译后的二进制
-run: build
+run: clean build
 	./$(BINARY) start
 
 # 启动开发环境（前后端热重载）
