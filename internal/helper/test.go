@@ -152,8 +152,8 @@ func TestChannelConfigStream(ctx context.Context, cfg ChannelTestConfig, sendEve
 			} else {
 				failedCount++
 			}
-			mu.Unlock()
 			sendEvent(StreamEvent{Type: StreamEventResult, Result: &result})
+			mu.Unlock()
 		}(task)
 	}
 
