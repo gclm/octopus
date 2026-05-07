@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { useLogs, type LogListParams } from '@/api/endpoints/log';
-import { useModelList } from '@/api/endpoints/model';
+import { useGroupList } from '@/api/endpoints/group';
 import { LogCard } from './Item';
 import { LogHeader, type FilterValues } from './Header';
 import { Loader2 } from 'lucide-react';
@@ -40,12 +40,12 @@ export function Log() {
 
     const apiParams = useMemo(() => filterToApiParams(filters), [filters]);
     const { logs, hasMore, isLoading, isLoadingMore, loadMore } = useLogs({ pageSize: 20, filters: apiParams });
-    const { data: modelList } = useModelList();
+    const { data: groups } = useGroupList();
 
     const models = useMemo(() => {
-        if (!modelList) return [];
-        return modelList.map((m) => m.name).sort();
-    }, [modelList]);
+        if (!groups) return [];
+        return groups.map((g) => g.name).sort();
+    }, [groups]);
 
     const handleFilter = useCallback((values: FilterValues) => {
         setFilters(values);
