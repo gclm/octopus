@@ -231,6 +231,11 @@ export function LogCard({ log }: { log: RelayLog }) {
                                 <span className="text-muted-foreground truncate" title={log.actual_model_name}>
                                     {log.actual_model_name}
                                 </span>
+                                {(log.request_id || log.client_request_id) && (
+                                    <span className="shrink-0 font-mono text-[10px] text-muted-foreground/70 bg-muted/50 rounded px-1.5 py-0.5 truncate max-w-[100px]" title={log.client_request_id || log.request_id}>
+                                        {(log.client_request_id || log.request_id || '').slice(0, 8)}
+                                    </span>
+                                )}
                                 {log.attempts?.some(a => a.sticky) && (
                                     <Pin className="size-3.5 shrink-0 text-amber-500" />
                                 )}

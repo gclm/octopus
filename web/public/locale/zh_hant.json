@@ -106,6 +106,7 @@
             "costAnalysis": "成本分析",
             "successRate": "成功率",
             "avgResponseTime": "平均響應",
+            "avgTTFT": "首字延遲",
             "requestCount": "請求次數",
             "totalToken": "Token 用量",
             "totalCost": "總成本",
@@ -478,6 +479,30 @@
             "attempts": "次嘗試",
             "success": "成功",
             "failed": "失敗"
+        },
+        "filter": {
+            "searchPlaceholder": "搜尋 RequestID...",
+            "last5m": "近5分鐘",
+            "last30m": "近30分鐘",
+            "last1h": "近1小時",
+            "last6h": "近6小時",
+            "last24h": "近24小時",
+            "last7d": "近7天",
+            "last30d": "近30天",
+            "status": "狀態",
+            "all": "全部",
+            "success": "成功",
+            "error": "失敗",
+            "model": "模型",
+            "channel": "供應源",
+            "apply": "查詢",
+            "reset": "重設"
+        },
+        "summary": {
+            "total": "總請求",
+            "successRate": "成功率",
+            "avgTTFT": "平均首字",
+            "totalCost": "總費用"
         }
     },
     "channel": {

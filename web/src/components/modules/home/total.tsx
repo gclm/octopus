@@ -11,6 +11,7 @@ import {
     Zap,
     Database,
     TrendingDown,
+    Gauge,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useStatsRange } from '@/api/endpoints/stats';
@@ -65,6 +66,18 @@ export function Total() {
                         <div className="text-2xl font-bold">
                             <AnimatedNumber value={statsRange?.avg_response_time.formatted.value} />
                             <span className="text-base font-normal text-muted-foreground">{statsRange?.avg_response_time.formatted.unit}</span>
+                        </div>
+                    </div>
+
+                    {/* 平均首字延迟 */}
+                    <div className="space-y-1">
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <Gauge className="w-3.5 h-3.5 text-amber-500" />
+                            {t('avgTTFT')}
+                        </div>
+                        <div className="text-2xl font-bold">
+                            <AnimatedNumber value={statsRange?.avg_ttft.formatted.value} />
+                            <span className="text-base font-normal text-muted-foreground">{statsRange?.avg_ttft.formatted.unit}</span>
                         </div>
                     </div>
 

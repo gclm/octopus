@@ -76,7 +76,8 @@ type relayAttempt struct {
 
 // attemptResult 封装单次尝试的结果
 type attemptResult struct {
-	Success bool  // 是否成功
-	Written bool  // 流式响应是否已开始写入（不可重试）
-	Err     error // 失败时的错误
+	Success    bool  // 是否成功
+	Written    bool  // 流式响应是否已开始写入（不可重试）
+	StatusCode int   // 上游响应状态码（0 表示网络错误）
+	Err        error // 失败时的错误
 }

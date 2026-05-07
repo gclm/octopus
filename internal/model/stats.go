@@ -8,8 +8,11 @@ type StatsMetrics struct {
 	WaitTime       int64   `json:"wait_time" gorm:"bigint"`
 	RequestSuccess int64   `json:"request_success" gorm:"bigint"`
 	RequestFailed  int64   `json:"request_failed" gorm:"bigint"`
-	CachedTokens   int64   `json:"cached_tokens" gorm:"bigint"`  // 缓存读取的 token 数
-	CachedCost     float64 `json:"cached_cost" gorm:"type:real"` // 缓存节省的成本
+	CachedTokens   int64   `json:"cached_tokens" gorm:"bigint"`    // 缓存读取的 token 数
+	CachedCost     float64 `json:"cached_cost" gorm:"type:real"`   // 缓存节省的成本
+	FirstTokenMs   int64   `json:"first_token_ms" gorm:"bigint"`   // 首 Token 延迟累计 (ms)
+	HasFirstToken  int64   `json:"has_first_token" gorm:"bigint"`  // 有首 Token 记录的请求数
+	DurationMs     int64   `json:"duration_ms" gorm:"bigint"`      // 请求总耗时累计 (ms)
 }
 
 type StatsTotal struct {
@@ -64,4 +67,7 @@ func (s *StatsMetrics) Add(delta StatsMetrics) {
 	s.RequestFailed += delta.RequestFailed
 	s.CachedTokens += delta.CachedTokens
 	s.CachedCost += delta.CachedCost
+	s.FirstTokenMs += delta.FirstTokenMs
+	s.HasFirstToken += delta.HasFirstToken
+	s.DurationMs += delta.DurationMs
 }

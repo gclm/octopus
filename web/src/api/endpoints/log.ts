@@ -30,6 +30,8 @@ export interface ChannelAttempt {
 export interface RelayLog {
     id: number;
     time: number;                // 时间戳
+    request_id?: string;         // 网关生成的请求 ID
+    client_request_id?: string;  // 客户端传入的请求 ID
     request_model_name: string;  // 请求模型名称
     request_api_key_name?: string; // 请求使用的 API Key 名称
     channel: number;             // 实际使用的渠道ID
@@ -55,6 +57,10 @@ export interface LogListParams {
     page_size?: number;
     start_time?: number;
     end_time?: number;
+    model?: string;
+    channel_id?: number;
+    request_id?: string;
+    status?: 'all' | 'success' | 'error';
 }
 
 /**
@@ -82,23 +88,17 @@ export function useClearLogs() {
     });
 }
 
-const logsInfiniteQueryKey = (pageSize: number) => ['logs', 'infinite', pageSize] as const;
+const logsInfiniteQueryKey = (pageSize: number, filters?: LogListParams) => ['logs', 'infinite', pageSize, filters] as const;
 
 /**
  * 日志管理 Hook
  * 整合初始加载、SSE 实时推送、滚动加载更多
  * 
  * @example
- * const { logs, isConnected, hasMore, isLoadingMore, loadMore, clear } = useLogs();
- * 
- * // logs 自动包含历史日志和实时日志，按时间倒序
- * logs.forEach(log => console.log(log.request_model_name));
- * 
- * // 滚动到底部时加载更多
- * if (hasMore && !isLoadingMore) loadMore();
+ * const { logs, isConnected, hasMore, isLoadingMore, loadMore, clear } = useLogs({ filters: { model: 'gpt-4' } });
  */
-export function useLogs(options: { pageSize?: number } = {}) {
-    const { pageSize = 20 } = options;
+export function useLogs(options: { pageSize?: number; filters?: LogListParams } = {}) {
+    const { pageSize = 20, filters } = options;
 
     const [isConnected, setIsConnected] = useState(false);
     const [error, setError] = useState<Error | null>(null);
@@ -107,12 +107,19 @@ export function useLogs(options: { pageSize?: number } = {}) {
     const queryClient = useQueryClient();
 
     const logsQuery = useInfiniteQuery({
-        queryKey: logsInfiniteQueryKey(pageSize),
+        queryKey: logsInfiniteQueryKey(pageSize, filters),
         initialPageParam: 1,
         queryFn: async ({ pageParam }) => {
             const params = new URLSearchParams();
             params.set('page', String(pageParam));
             params.set('page_size', String(pageSize));
+            if (filters?.start_time) params.set('start_time', String(filters.start_time));
+            if (filters?.end_time) params.set('end_time', String(filters.end_time));
+            if (filters?.model) params.set('model', filters.model);
+            if (filters?.channel_id) params.set('channel_id', String(filters.channel_id));
+            if (filters?.request_id) params.set('request_id', filters.request_id);
+            if (filters?.status === 'success') params.set('status', 'success');
+            if (filters?.status === 'error') params.set('status', 'error');
             const result = await apiClient.get<RelayLog[] | null>(`/api/v1/log/list?${params.toString()}`);
             return result ?? [];
         },

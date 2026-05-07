@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gclm/octopus/internal/conf"
+	"github.com/gclm/octopus/internal/op"
 	"github.com/gclm/octopus/internal/relay/bodycache"
 	_ "github.com/gclm/octopus/internal/server/handlers"
 	"github.com/gclm/octopus/internal/server/middleware"
@@ -46,6 +47,9 @@ func Start() error {
 	r.Use(middleware.StaticEmbed("/", static.StaticFS))
 
 	router.RegisterAll(r)
+
+	// 初始化异步日志 Sink
+	op.InitLogSink()
 
 	httpSrv.Addr = fmt.Sprintf("%s:%d", conf.AppConfig.Server.Host, conf.AppConfig.Server.Port)
 	httpSrv.Handler = r

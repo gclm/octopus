@@ -106,6 +106,7 @@
             "costAnalysis": "成本分析",
             "successRate": "成功率",
             "avgResponseTime": "平均响应",
+            "avgTTFT": "首字延迟",
             "requestCount": "请求次数",
             "totalToken": "Token 用量",
             "totalCost": "总成本",
@@ -478,6 +479,30 @@
             "attempts": "次尝试",
             "success": "成功",
             "failed": "失败"
+        },
+        "filter": {
+            "searchPlaceholder": "搜索 RequestID...",
+            "last5m": "近5分钟",
+            "last30m": "近30分钟",
+            "last1h": "近1小时",
+            "last6h": "近6小时",
+            "last24h": "近24小时",
+            "last7d": "近7天",
+            "last30d": "近30天",
+            "status": "状态",
+            "all": "全部",
+            "success": "成功",
+            "error": "失败",
+            "model": "模型",
+            "channel": "渠道",
+            "apply": "查询",
+            "reset": "重置"
+        },
+        "summary": {
+            "total": "总请求",
+            "successRate": "成功率",
+            "avgTTFT": "平均首字",
+            "totalCost": "总费用"
         }
     },
     "channel": {

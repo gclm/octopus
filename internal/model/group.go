@@ -3,11 +3,25 @@ package model
 type GroupMode int
 
 const (
-	GroupModeRoundRobin   GroupMode = 1 // 轮询：依次循环选择渠道
-	GroupModeFailover    GroupMode = 3 // 故障转移：按优先级选择，失败时降级到下一个
-	GroupModeWeighted    GroupMode = 4 // 加权分配：按优权重分配流量
-	GroupModeHealthBased GroupMode = 5 // 健康优先：按健康分择优
+	GroupModeFallback  GroupMode = 1 // 故障转移：按优先级排序，同优先级内轮询
+	GroupModeLoadShare GroupMode = 2 // 负载均衡：按权重分配，自动结合健康分降级
 )
+
+// legacyToNewMode 旧模式到新模式的映射
+var legacyToNewMode = map[GroupMode]GroupMode{
+	1: GroupModeFallback,  // 轮询 → 故障转移
+	3: GroupModeFallback,  // 故障转移 → 故障转移
+	4: GroupModeLoadShare, // 加权分配 → 负载均衡
+	5: GroupModeLoadShare, // 健康优先 → 负载均衡
+}
+
+// NormalizeGroupMode 将旧模式值映射为新模式值
+func NormalizeGroupMode(mode GroupMode) GroupMode {
+	if newMode, ok := legacyToNewMode[mode]; ok {
+		return newMode
+	}
+	return GroupModeFallback // 默认
+}
 
 type Group struct {
 	ID                int         `json:"id" gorm:"primaryKey"`

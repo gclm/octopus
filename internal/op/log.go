@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gclm/octopus/internal/db"
@@ -119,12 +120,20 @@ func RelayLogAdd(ctx context.Context, relayLog model.RelayLog) error {
 	if err != nil {
 		return err
 	}
+	relayLog.ID = snowflake.GenerateID()
+	go notifySubscribers(relayLog)
+
+	// 使用异步 Sink（如果已初始化）
+	if enabled && logSink != nil {
+		logSink.Send(relayLog)
+		return nil
+	}
+
+	// Fallback：同步缓存逻辑
 	maxSize := relayLogMaxSize
 	if !enabled {
 		maxSize = relayLogMaxSizeNoDB
 	}
-	relayLog.ID = snowflake.GenerateID()
-	go notifySubscribers(relayLog)
 
 	relayLogCacheLock.Lock()
 	relayLogCache = append(relayLogCache, relayLog)
@@ -186,26 +195,67 @@ func relayLogCleanup(ctx context.Context) error {
 	return db.GetDB().WithContext(ctx).Where("time < ?", cutoffTime).Delete(&model.RelayLog{}).Error
 }
 
-// RelayLogList 查询日志列表，支持可选的时间范围过滤
-// startTime 和 endTime 为 nil 时表示不限制时间范围
-func RelayLogList(ctx context.Context, startTime, endTime *int, page, pageSize int) ([]model.RelayLog, error) {
+// LogListQuery 日志列表查询参数
+type LogListQuery struct {
+	StartTime *int
+	EndTime   *int
+	Model     string
+	ChannelID *int
+	RequestID string
+	Status    string // "success" or "error"
+}
+
+// RelayLogList 查询日志列表，支持多维度过滤
+func RelayLogList(ctx context.Context, q *LogListQuery, page, pageSize int) ([]model.RelayLog, error) {
 	enabled, err := SettingGetBool(model.SettingKeyRelayLogKeepEnabled)
 	if err != nil {
 		return nil, err
 	}
-	hasTimeFilter := startTime != nil && endTime != nil
+	hasTimeFilter := q.StartTime != nil && q.EndTime != nil
+
+	// 构建数据库查询
+	query := db.GetDB().WithContext(ctx)
+	if hasTimeFilter {
+		query = query.Where("time >= ? AND time <= ?", *q.StartTime, *q.EndTime)
+	}
+	if q.Model != "" {
+		query = query.Where("request_model_name = ?", q.Model)
+	}
+	if q.ChannelID != nil {
+		query = query.Where("channel = ?", *q.ChannelID)
+	}
+	if q.RequestID != "" {
+		query = query.Where("request_id = ? OR client_request_id = ?", q.RequestID, q.RequestID)
+	}
+	if q.Status == "success" {
+		query = query.Where("error = '' OR error IS NULL")
+	} else if q.Status == "error" {
+		query = query.Where("error != '' AND error IS NOT NULL")
+	}
 
 	// 获取缓存中符合条件的日志
 	relayLogCacheLock.Lock()
 	var cachedLogs []model.RelayLog
-	for _, log := range relayLogCache {
-		if hasTimeFilter {
-			if log.Time >= int64(*startTime) && log.Time <= int64(*endTime) {
-				cachedLogs = append(cachedLogs, log)
-			}
-		} else {
-			cachedLogs = append(cachedLogs, log)
+	for _, entry := range relayLogCache {
+		if hasTimeFilter && (entry.Time < int64(*q.StartTime) || entry.Time > int64(*q.EndTime)) {
+			continue
 		}
+		if q.Model != "" && entry.RequestModelName != q.Model {
+			continue
+		}
+		if q.ChannelID != nil && entry.ChannelId != *q.ChannelID {
+			continue
+		}
+		if q.RequestID != "" && entry.RequestID != q.RequestID && entry.ClientRequestID != q.RequestID {
+			continue
+		}
+		if q.Status == "success" && entry.Error != "" {
+			continue
+		}
+		if q.Status == "error" && entry.Error == "" {
+			continue
+		}
+		cachedLogs = append(cachedLogs, entry)
 	}
 	relayLogCacheLock.Unlock()
 
@@ -237,11 +287,6 @@ func RelayLogList(ctx context.Context, startTime, endTime *int, page, pageSize i
 				dbOffset = offset - cacheCount
 			}
 
-			query := db.GetDB().WithContext(ctx)
-			if hasTimeFilter {
-				query = query.Where("time >= ? AND time <= ?", *startTime, *endTime)
-			}
-
 			var dbLogs []model.RelayLog
 			if err := query.Order("id DESC").Offset(dbOffset).Limit(remaining).Find(&dbLogs).Error; err != nil {
 				return nil, err
@@ -258,4 +303,69 @@ func RelayLogClear(ctx context.Context) error {
 	relayLogCache = make([]model.RelayLog, 0, relayLogMaxSize)
 	relayLogCacheLock.Unlock()
 	return db.GetDB().WithContext(ctx).Where("1 = 1").Delete(&model.RelayLog{}).Error
+}
+
+// asyncLogSink 异步批量日志写入器
+type asyncLogSink struct {
+	queue     chan model.RelayLog
+	batchSize int
+	dropped   atomic.Int64 // 丢弃计数（backpressure）
+}
+
+var logSink *asyncLogSink
+
+// InitLogSink 初始化异步日志 Sink，在应用启动时调用
+func InitLogSink() {
+	logSink = &asyncLogSink{
+		queue:     make(chan model.RelayLog, 5000),
+		batchSize: 200,
+	}
+	go logSink.run()
+}
+
+// GetLogSinkDropped 返回丢弃计数
+func GetLogSinkDropped() int64 {
+	if logSink == nil {
+		return 0
+	}
+	return logSink.dropped.Load()
+}
+
+func (s *asyncLogSink) run() {
+	batch := make([]model.RelayLog, 0, s.batchSize)
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case entry := <-s.queue:
+			batch = append(batch, entry)
+			if len(batch) >= s.batchSize {
+				s.flush(batch)
+				batch = batch[:0]
+			}
+		case <-ticker.C:
+			if len(batch) > 0 {
+				s.flush(batch)
+				batch = batch[:0]
+			}
+		}
+	}
+}
+
+func (s *asyncLogSink) flush(batch []model.RelayLog) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := db.GetDB().WithContext(ctx).CreateInBatches(batch, 50).Error; err != nil {
+		log.Errorf("async log sink flush error: %v", err)
+	}
+}
+
+func (s *asyncLogSink) Send(entry model.RelayLog) {
+	select {
+	case s.queue <- entry:
+	default:
+		s.dropped.Add(1)
+	}
 }

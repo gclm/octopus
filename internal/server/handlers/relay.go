@@ -12,6 +12,7 @@ import (
 
 func init() {
 	router.NewGroupRouter("/v1").
+		Use(middleware.RequestID()).
 		Use(middleware.APIKeyAuth()).
 		Use(middleware.RequireJSON()).
 		AddRoute(

@@ -2,6 +2,7 @@ package relay
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -55,8 +56,17 @@ func Handler(inboundType inbound.InboundType, c *gin.Context) {
 		return
 	}
 
+	// 提取请求 ID
+	var requestID, clientRequestID string
+	if rid, ok := c.Get("request_id"); ok {
+		if s, ok := rid.(string); ok {
+			requestID = s
+		}
+	}
+	clientRequestID = c.GetHeader("X-Request-ID")
+
 	// 初始化 Metrics
-	metrics := NewRelayMetrics(apiKeyID, requestModel, internalRequest)
+	metrics := NewRelayMetrics(apiKeyID, requestModel, internalRequest, requestID, clientRequestID)
 
 	// 请求级上下文
 	req := &relayRequest{
@@ -134,8 +144,9 @@ func Handler(inboundType inbound.InboundType, c *gin.Context) {
 			return !tripped
 		}
 
-		// channel 内 key 重试：当 key 失败（特别是 429）时，尝试同 channel 的其他 key
+		// channel 内 key 重试
 		triedKeys := make(map[int]struct{})
+		networkRetry := false
 
 		for {
 			// 获取可用的 key（排除已熔断和已尝试的）
@@ -145,14 +156,23 @@ func Handler(inboundType inbound.InboundType, c *gin.Context) {
 			}
 			usedKey := channel.GetChannelKey(circuitBreakerFilter, triedKeyFilter)
 			if usedKey.ChannelKey == "" {
-				break // 没有可用的 key，尝试下一个 channel
+				break
 			}
 
-			log.Infof("request model %s, mode: %d, forwarding to channel: %s model: %s (attempt %d/%d, sticky=%t)",
-				requestModel, group.Mode, channel.Name, item.ModelName,
-				iter.Index()+1, iter.Len(), iter.IsSticky())
+			wasNetworkRetry := networkRetry
+			if networkRetry {
+				networkRetry = false
+			}
 
-			// 构造尝试级上下文 -- 只写变化的 4 个字段
+			suffix := ""
+			if wasNetworkRetry {
+				suffix = ", network-retry"
+			}
+
+			log.Infof("request model %s, mode: %d, forwarding to channel: %s model: %s (attempt %d/%d, sticky=%t%s)",
+				requestModel, group.Mode, channel.Name, item.ModelName,
+				iter.Index()+1, iter.Len(), iter.IsSticky(), suffix)
+
 			ra := &relayAttempt{
 				relayRequest:         req,
 				outAdapter:           outAdapter,
@@ -173,18 +193,35 @@ func Handler(inboundType inbound.InboundType, c *gin.Context) {
 			}
 			lastErr = result.Err
 
-			// 429 错误：标记这个 key 已尝试，然后尝试同 channel 的其他 key
-			if usedKey.StatusCode == 429 {
-				log.Warnf("channel %s key %d got 429, trying other keys in same channel", channel.Name, usedKey.ID)
+			// 网络重试仍失败
+			if wasNetworkRetry {
+				log.Warnf("channel %s key %d network error retry failed, trying other keys: %v", channel.Name, usedKey.ID, result.Err)
 				triedKeys[usedKey.ID] = struct{}{}
 				continue
 			}
 
-			// 其他错误，跳出 key 重试循环，尝试下一个 channel
-			break
+			// 网络错误（StatusCode=0）：标记后重试
+			if result.StatusCode == 0 {
+				log.Warnf("channel %s key %d network error, retrying same key: %v", channel.Name, usedKey.ID, result.Err)
+				triedKeys[usedKey.ID] = struct{}{}
+				networkRetry = true
+				time.Sleep(200 * time.Millisecond)
+				continue
+			}
+
+			// 502/503
+			if result.StatusCode == 502 || result.StatusCode == 503 {
+				log.Warnf("channel %s key %d got %d, retrying with another key", channel.Name, usedKey.ID, result.StatusCode)
+				triedKeys[usedKey.ID] = struct{}{}
+				time.Sleep(200 * time.Millisecond)
+				continue
+			}
+
+			// 其他错误
+			log.Warnf("channel %s key %d got %d, trying other keys in same channel", channel.Name, usedKey.ID, result.StatusCode)
+			triedKeys[usedKey.ID] = struct{}{}
 		}
 	}
-
 	// 所有通道都失败
 	metrics.Save(c.Request.Context(), false, lastErr, iter.Attempts())
 	resp.Error(c, http.StatusBadGateway, "all channels failed")
@@ -238,14 +275,15 @@ func (ra *relayAttempt) attempt() attemptResult {
         // 健康分:记录失败
         balancer.RecordHealthFailure(ra.channel.ID, ra.internalRequest.Model)
 
-	written := ra.c.Writer.Written()
-	if written {
+	writtenBefore := ra.c.Writer.Written()
+	if writtenBefore {
 		ra.collectResponse()
 	}
 	return attemptResult{
-		Success: false,
-		Written: written,
-		Err:     fmt.Errorf("channel %s failed: %v", ra.channel.Name, fwdErr),
+		Success:    false,
+		Written:    writtenBefore,
+		StatusCode: statusCode,
+		Err:        fmt.Errorf("channel %s failed: %v", ra.channel.Name, fwdErr),
 	}
 }
 
@@ -365,7 +403,12 @@ func (ra *relayAttempt) sendRequest(req *http.Request) (*http.Response, error) {
 func (ra *relayAttempt) handleStreamResponse(ctx context.Context, response *http.Response) error {
 	if ct := response.Header.Get("Content-Type"); ct != "" && !strings.Contains(strings.ToLower(ct), "text/event-stream") {
 		body, _ := io.ReadAll(io.LimitReader(response.Body, 16*1024))
-		return fmt.Errorf("upstream returned non-SSE content-type %q for stream request: %s", ct, string(body))
+		errMsg := extractUpstreamError(body)
+
+		log.Warnf("upstream non-SSE: channel=%s model=%s ct=%s status=%d detail=%s",
+			ra.channel.Name, ra.internalRequest.Model, ct, response.StatusCode, errMsg)
+
+		return fmt.Errorf("upstream returned non-SSE content-type %q: %s", ct, errMsg)
 	}
 
 	// 设置 SSE 响应头
@@ -521,4 +564,40 @@ func (ra *relayAttempt) collectResponse() {
 	}
 
 	ra.metrics.SetInternalResponse(internalResponse, ra.internalRequest.Model)
+}
+
+// extractUpstreamError 从上游响应体中提取结构化错误信息
+func extractUpstreamError(body []byte) string {
+	if len(body) == 0 {
+		return "(empty body)"
+	}
+
+	var raw map[string]any
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return string(body)
+	}
+
+	// 智谱: {"code":500,"msg":"404 NOT_FOUND","success":false}
+	if msg, ok := raw["msg"].(string); ok {
+		if code, ok := raw["code"].(float64); ok {
+			return fmt.Sprintf("%d %s", int(code), msg)
+		}
+		return msg
+	}
+
+	// OpenAI: {"error":{"message":"...","type":"...","param":"..."}}
+	if errObj, ok := raw["error"].(map[string]any); ok {
+		parts := make([]string, 0, 2)
+		if msg, ok := errObj["message"].(string); ok {
+			parts = append(parts, msg)
+		}
+		if param, ok := errObj["param"].(string); ok && param != "" {
+			parts = append(parts, fmt.Sprintf("(param: %s)", param))
+		}
+		if len(parts) > 0 {
+			return strings.Join(parts, " ")
+		}
+	}
+
+	return string(body)
 }

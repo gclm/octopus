@@ -425,7 +425,10 @@ type StatsRangeResponse struct {
 	RequestFailed   int64   `json:"request_failed"`
 	SuccessRate     float64 `json:"success_rate"`
 	AvgResponseTime int64   `json:"avg_response_time"`
-	TotalWaitTime   int64   `json:"-"` // 内部使用
+	AvgTTFT         float64 `json:"avg_ttft"` // 平均首字延迟 (ms)
+	TotalWaitTime   int64   `json:"-"`        // 内部使用
+	TotalTTFT       int64   `json:"-"`        // 内部使用
+	HasTTFTCount    int64   `json:"-"`        // 内部使用
 
 	TotalTokens  int64   `json:"total_tokens"`
 	InputTokens  int64   `json:"input_tokens"`
@@ -461,6 +464,8 @@ func StatsGetByRange(ctx context.Context, startDate, endDate string) (*StatsRang
 		response.TotalWaitTime += stat.WaitTime
 		response.CachedTokens += stat.CachedTokens
 		response.CachedCost += stat.CachedCost
+		response.TotalTTFT += stat.FirstTokenMs
+		response.HasTTFTCount += stat.HasFirstToken
 	}
 
 	response.RequestCount = response.RequestSuccess + response.RequestFailed
@@ -471,6 +476,11 @@ func StatsGetByRange(ctx context.Context, startDate, endDate string) (*StatsRang
 	if response.RequestCount > 0 {
 		response.SuccessRate = float64(response.RequestSuccess) / float64(response.RequestCount) * 100
 		response.AvgResponseTime = response.TotalWaitTime / response.RequestCount
+	}
+
+	// 计算平均 TTFT
+	if response.HasTTFTCount > 0 {
+		response.AvgTTFT = float64(response.TotalTTFT) / float64(response.HasTTFTCount)
 	}
 
 	// 计算缓存命中率

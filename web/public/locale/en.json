@@ -106,6 +106,7 @@
             "costAnalysis": "Cost Analysis",
             "successRate": "Success Rate",
             "avgResponseTime": "Avg Response",
+            "avgTTFT": "Avg TTFT",
             "requestCount": "Requests",
             "totalToken": "Total Tokens",
             "totalCost": "Total Cost",
@@ -478,6 +479,30 @@
             "attempts": "attempts",
             "success": "Success",
             "failed": "Failed"
+        },
+        "filter": {
+            "searchPlaceholder": "Search RequestID...",
+            "last5m": "Last 5m",
+            "last30m": "Last 30m",
+            "last1h": "Last 1h",
+            "last6h": "Last 6h",
+            "last24h": "Last 24h",
+            "last7d": "Last 7d",
+            "last30d": "Last 30d",
+            "status": "Status",
+            "all": "All",
+            "success": "Success",
+            "error": "Failed",
+            "model": "Model",
+            "channel": "Channel",
+            "apply": "Apply",
+            "reset": "Reset"
+        },
+        "summary": {
+            "total": "Total",
+            "successRate": "Success Rate",
+            "avgTTFT": "Avg TTFT",
+            "totalCost": "Total Cost"
         }
     },
     "channel": {

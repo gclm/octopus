@@ -16,9 +16,11 @@ import (
 
 // RelayMetrics 负责最终的日志收集与持久化
 type RelayMetrics struct {
-	APIKeyID     int
-	RequestModel string
-	StartTime    time.Time
+	APIKeyID        int
+	RequestModel    string
+	StartTime       time.Time
+	RequestID       string // 网关生成的请求 ID
+	ClientRequestID string // 客户端传入的请求 ID
 
 	// 首 Token 时间
 	FirstTokenTime time.Time
@@ -32,12 +34,14 @@ type RelayMetrics struct {
 	Stats       model.StatsMetrics
 }
 
-func NewRelayMetrics(apiKeyID int, requestModel string, req *transformerModel.InternalLLMRequest) *RelayMetrics {
+func NewRelayMetrics(apiKeyID int, requestModel string, req *transformerModel.InternalLLMRequest, requestID, clientRequestID string) *RelayMetrics {
 	return &RelayMetrics{
 		APIKeyID:        apiKeyID,
 		RequestModel:    requestModel,
 		StartTime:       time.Now(),
 		InternalRequest: req,
+		RequestID:       requestID,
+		ClientRequestID: clientRequestID,
 	}
 }
 
@@ -92,6 +96,13 @@ func (m *RelayMetrics) Save(ctx context.Context, success bool, err error, attemp
 		globalStats.RequestFailed = 1
 	}
 
+	// TTFT 和 Duration
+	if !m.FirstTokenTime.IsZero() {
+		globalStats.FirstTokenMs = m.FirstTokenTime.Sub(m.StartTime).Milliseconds()
+		globalStats.HasFirstToken = 1
+	}
+	globalStats.DurationMs = duration.Milliseconds()
+
 	channelID, channelName := finalChannel(attempts)
 	op.StatsTotalUpdate(globalStats)
 	op.StatsHourlyUpdate(globalStats)
@@ -138,6 +149,8 @@ func (m *RelayMetrics) saveLog(ctx context.Context, err error, duration time.Dur
 
 	relayLog := model.RelayLog{
 		Time:             m.StartTime.Unix(),
+		RequestID:        m.RequestID,
+		ClientRequestID:  m.ClientRequestID,
 		RequestModelName: m.RequestModel,
 		ChannelName:      channelName,
 		ChannelId:        channelID,

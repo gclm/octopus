@@ -194,6 +194,7 @@ export interface StatsRangeResponse {
     request_failed: number;
     success_rate: number;
     avg_response_time: number;
+    avg_ttft: number; // 平均首字延迟 (ms)
 
     total_tokens: number;
     input_tokens: number;
@@ -214,6 +215,7 @@ export interface StatsRangeResponseFormatted {
     request_failed: ReturnType<typeof formatCount>;
     success_rate: string;
     avg_response_time: ReturnType<typeof formatTime>;
+    avg_ttft: ReturnType<typeof formatTime>;
 
     total_tokens: ReturnType<typeof formatCount>;
     input_tokens: ReturnType<typeof formatCount>;
@@ -240,6 +242,7 @@ export function useStatsRange(startDate: string, endDate: string) {
             request_failed: formatCount(data.request_failed),
             success_rate: `${data.success_rate.toFixed(1)}%`,
             avg_response_time: formatTime(data.avg_response_time),
+            avg_ttft: formatTime(data.avg_ttft),
 
             total_tokens: formatCount(data.total_tokens),
             input_tokens: formatCount(data.input_tokens),
