@@ -1,5 +1,5 @@
 import type { InfiniteData } from '@tanstack/react-query';
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient, API_BASE_URL } from '../client';
 import { logger } from '@/lib/logger';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -42,8 +42,8 @@ export interface RelayLog {
     ftut: number;                // 首字时间(毫秒)
     use_time: number;            // 总用时(毫秒)
     cost: number;                // 消耗费用
-    request_content: string;     // 请求内容
-    response_content: string;    // 响应内容
+    request_content?: string;    // 请求内容（仅详情接口返回）
+    response_content?: string;   // 响应内容（仅详情接口返回）
     error: string;               // 错误信息
     attempts?: ChannelAttempt[]; // 所有尝试记录
     total_attempts?: number;     // 总尝试次数
@@ -234,4 +234,25 @@ export function useLogs(options: { pageSize?: number; filters?: LogListParams } 
         loadMore,
         clear,
     };
+}
+
+/**
+ * 日志详情 Hook
+ * 打开详情弹窗时按需加载 request_content 和 response_content
+ *
+ * @example
+ * const { detail, isLoading } = useLogDetail(log.id);
+ */
+export function useLogDetail(id: number, active: boolean) {
+    const { data, isLoading } = useQuery({
+        queryKey: ['log-detail', id],
+        queryFn: async () => {
+            const result = await apiClient.get<RelayLog>(`/api/v1/log/detail?id=${id}`);
+            return result ?? null;
+        },
+        enabled: active,
+        staleTime: Infinity,
+    });
+
+    return { detail: data ?? null, isLoading };
 }

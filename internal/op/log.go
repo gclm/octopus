@@ -240,6 +240,9 @@ func RelayLogList(ctx context.Context, q *LogListQuery, page, pageSize int) ([]m
 		query = query.Where("error != '' AND error IS NOT NULL")
 	}
 
+	// 列表不需要加载大文本字段
+	listColumns := "id, time, request_id, client_request_id, request_model_name, request_api_key_name, channel_id, channel_name, actual_model_name, input_tokens, output_tokens, ftut, use_time, cost, error, attempts, total_attempts"
+
 	// 获取缓存中符合条件的日志
 	relayLogCacheLock.Lock()
 	var cachedLogs []model.RelayLog
@@ -262,6 +265,9 @@ func RelayLogList(ctx context.Context, q *LogListQuery, page, pageSize int) ([]m
 		if q.Status == "error" && entry.Error == "" {
 			continue
 		}
+		// 清除大字段，减少内存占用
+		entry.RequestContent = ""
+		entry.ResponseContent = ""
 		cachedLogs = append(cachedLogs, entry)
 	}
 	relayLogCacheLock.Unlock()
@@ -295,7 +301,7 @@ func RelayLogList(ctx context.Context, q *LogListQuery, page, pageSize int) ([]m
 			}
 
 			var dbLogs []model.RelayLog
-			if err := query.Order("id DESC").Offset(dbOffset).Limit(remaining).Find(&dbLogs).Error; err != nil {
+			if err := query.Select(listColumns).Order("id DESC").Offset(dbOffset).Limit(remaining).Find(&dbLogs).Error; err != nil {
 				return nil, err
 			}
 			result = append(result, dbLogs...)
@@ -303,6 +309,27 @@ func RelayLogList(ctx context.Context, q *LogListQuery, page, pageSize int) ([]m
 	}
 
 	return result, nil
+}
+
+// RelayLogDetail 根据 ID 获取单条日志详情（包含请求和响应内容）
+func RelayLogDetail(ctx context.Context, id int64) (*model.RelayLog, error) {
+	// 先从缓存查找
+	relayLogCacheLock.Lock()
+	for _, entry := range relayLogCache {
+		if entry.ID == id {
+			result := entry
+			relayLogCacheLock.Unlock()
+			return &result, nil
+		}
+	}
+	relayLogCacheLock.Unlock()
+
+	// 缓存未命中，从数据库查询
+	var log model.RelayLog
+	if err := db.GetDB().WithContext(ctx).Where("id = ?", id).First(&log).Error; err != nil {
+		return nil, err
+	}
+	return &log, nil
 }
 
 func RelayLogClear(ctx context.Context) error {

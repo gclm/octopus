@@ -26,6 +26,7 @@ export type MorphingDialogContextType = {
   setIsOpen: React.Dispatch<React.SetStateAction<boolean>>;
   uniqueId: string;
   triggerRef: React.RefObject<HTMLDivElement | null>;
+  onOpenChange?: (open: boolean) => void;
 };
 
 const MorphingDialogContext =
@@ -44,15 +45,25 @@ function useMorphingDialog() {
 export type MorphingDialogProviderProps = {
   children: React.ReactNode;
   transition?: Transition;
+  onOpenChange?: (open: boolean) => void;
 };
 
 function MorphingDialogProvider({
   children,
   transition,
+  onOpenChange,
 }: MorphingDialogProviderProps) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpenInternal] = useState(false);
   const uniqueId = useId();
   const triggerRef = useRef<HTMLDivElement>(null!);
+
+  const setIsOpen = useCallback((value: React.SetStateAction<boolean>) => {
+    setIsOpenInternal(prev => {
+      const next = typeof value === 'function' ? value(prev) : value;
+      onOpenChange?.(next);
+      return next;
+    });
+  }, [onOpenChange]);
 
   const contextValue = useMemo(
     () => ({
@@ -60,8 +71,9 @@ function MorphingDialogProvider({
       setIsOpen,
       uniqueId,
       triggerRef,
+      onOpenChange,
     }),
-    [isOpen, uniqueId]
+    [isOpen, uniqueId, setIsOpen, onOpenChange]
   );
 
   return (
@@ -74,11 +86,12 @@ function MorphingDialogProvider({
 export type MorphingDialogProps = {
   children: React.ReactNode;
   transition?: Transition;
+  onOpenChange?: (open: boolean) => void;
 };
 
-function MorphingDialog({ children, transition }: MorphingDialogProps) {
+function MorphingDialog({ children, transition, onOpenChange }: MorphingDialogProps) {
   return (
-    <MorphingDialogProvider>
+    <MorphingDialogProvider onOpenChange={onOpenChange}>
       <MotionConfig transition={transition}>{children}</MotionConfig>
     </MorphingDialogProvider>
   );
