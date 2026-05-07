@@ -701,24 +701,28 @@ func formatSSEData(data []byte) []byte {
 // Request types
 
 type ResponsesRequest struct {
-	Model             string                `json:"model"`
-	Instructions      string                `json:"instructions,omitempty"`
-	Input             ResponsesInput        `json:"input"`
-	Tools             []ResponsesTool       `json:"tools,omitempty"`
-	ToolChoice        *ResponsesToolChoice  `json:"tool_choice,omitempty"`
-	ParallelToolCalls *bool                 `json:"parallel_tool_calls,omitempty"`
-	Stream            *bool                 `json:"stream,omitempty"`
-	Text              *ResponsesTextOptions `json:"text,omitempty"`
-	Store             *bool                 `json:"store,omitempty"`
-	ServiceTier       *string               `json:"service_tier,omitempty"`
-	User              *string               `json:"user,omitempty"`
-	Metadata          map[string]string     `json:"metadata,omitempty"`
-	MaxOutputTokens   *int64                `json:"max_output_tokens,omitempty"`
-	Temperature       *float64              `json:"temperature,omitempty"`
-	TopP              *float64              `json:"top_p,omitempty"`
-	Reasoning         *ResponsesReasoning   `json:"reasoning,omitempty"`
-	Include           []string              `json:"include,omitempty"`
-	TopLogprobs       *int64                `json:"top_logprobs,omitempty"`
+	Model              string                `json:"model"`
+	Instructions       string                `json:"instructions,omitempty"`
+	Input              ResponsesInput        `json:"input"`
+	Tools              []ResponsesTool       `json:"tools,omitempty"`
+	ToolChoice         *ResponsesToolChoice  `json:"tool_choice,omitempty"`
+	ParallelToolCalls  *bool                 `json:"parallel_tool_calls,omitempty"`
+	Stream             *bool                 `json:"stream,omitempty"`
+	Text               *ResponsesTextOptions `json:"text,omitempty"`
+	Store              *bool                 `json:"store,omitempty"`
+	ServiceTier        *string               `json:"service_tier,omitempty"`
+	User               *string               `json:"user,omitempty"`
+	Metadata           map[string]string     `json:"metadata,omitempty"`
+	MaxOutputTokens    *int64                `json:"max_output_tokens,omitempty"`
+	Temperature        *float64              `json:"temperature,omitempty"`
+	TopP               *float64              `json:"top_p,omitempty"`
+	Reasoning          *ResponsesReasoning   `json:"reasoning,omitempty"`
+	Include            []string              `json:"include,omitempty"`
+	TopLogprobs        *int64                `json:"top_logprobs,omitempty"`
+	PreviousResponseID *string               `json:"previous_response_id,omitempty"`
+	Seed               *int64                `json:"seed,omitempty"`
+	FrequencyPenalty   *float64              `json:"frequency_penalty,omitempty"`
+	PresencePenalty    *float64              `json:"presence_penalty,omitempty"`
 }
 
 type ResponsesInput struct {
@@ -967,6 +971,20 @@ func convertToInternalRequest(req *ResponsesRequest) (*model.InternalLLMRequest,
 		if req.Reasoning.MaxTokens != nil {
 			chatReq.ReasoningBudget = req.Reasoning.MaxTokens
 		}
+	}
+
+	// 新增字段映射
+	if req.PreviousResponseID != nil {
+		chatReq.PreviousResponseID = req.PreviousResponseID
+	}
+	if req.Seed != nil {
+		chatReq.Seed = req.Seed
+	}
+	if req.FrequencyPenalty != nil {
+		chatReq.FrequencyPenalty = req.FrequencyPenalty
+	}
+	if req.PresencePenalty != nil {
+		chatReq.PresencePenalty = req.PresencePenalty
 	}
 
 	// Convert tool choice

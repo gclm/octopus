@@ -44,10 +44,14 @@ func GroupGetEnabledMap(name string, ctx context.Context) (model.Group, error) {
 		return model.Group{}, fmt.Errorf("group not found")
 	}
 	if len(group.Items) == 0 {
-		group.Items = nil
-		return group, nil
+		// 返回副本，不修改缓存
+		result := group
+		result.Items = nil
+		return result, nil
 	}
 
+	// 返回过滤后的副本，不修改缓存中的原始数据
+	result := group
 	enabledItems := make([]model.GroupItem, 0, len(group.Items))
 	for _, item := range group.Items {
 		channel, ok := channelCache.Get(item.ChannelID)
@@ -56,8 +60,8 @@ func GroupGetEnabledMap(name string, ctx context.Context) (model.Group, error) {
 		}
 		enabledItems = append(enabledItems, item)
 	}
-	group.Items = enabledItems
-	return group, nil
+	result.Items = enabledItems
+	return result, nil
 }
 
 func GroupCreate(group *model.Group, ctx context.Context) error {

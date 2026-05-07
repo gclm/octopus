@@ -200,6 +200,10 @@ type InternalLLMRequest struct {
 	// returned text will not contain the stop sequence.
 	Stop *Stop `json:"stop,omitempty"` // string or []string
 
+	// PreviousResponseID is used by OpenAI Responses API to maintain conversation context.
+	// When specified, the model will use the previous response as context for the new request.
+	PreviousResponseID *string `json:"previous_response_id,omitempty"`
+
 	Stream        *bool          `json:"stream,omitempty"`
 	StreamOptions *StreamOptions `json:"stream_options,omitempty"`
 

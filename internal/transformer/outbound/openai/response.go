@@ -273,6 +273,11 @@ type ResponsesRequest struct {
 	Temperature       *float64              `json:"temperature,omitempty"`
 	TopP              *float64              `json:"top_p,omitempty"`
 	Reasoning         *ResponsesReasoning   `json:"reasoning,omitempty"`
+	PreviousResponseID *string              `json:"previous_response_id,omitempty"`
+	Stop              []string              `json:"stop,omitempty"`
+	Seed              *int                  `json:"seed,omitempty"`
+	FrequencyPenalty  *float64              `json:"frequency_penalty,omitempty"`
+	PresencePenalty   *float64              `json:"presence_penalty,omitempty"`
 }
 
 type ResponsesInput struct {
@@ -485,6 +490,28 @@ func ConvertToResponsesRequest(req *model.InternalLLMRequest) *ResponsesRequest 
 		result.Reasoning = &ResponsesReasoning{
 			Effort: req.ReasoningEffort,
 		}
+	}
+
+	// 新增字段映射
+	if req.PreviousResponseID != nil {
+		result.PreviousResponseID = req.PreviousResponseID
+	}
+	// Stop 字段映射
+	if req.Stop != nil {
+		if req.Stop.Stop != nil {
+			result.Stop = []string{*req.Stop.Stop}
+		} else if len(req.Stop.MultipleStop) > 0 {
+			result.Stop = req.Stop.MultipleStop
+		}
+	}
+	if req.Seed != nil {
+		result.Seed = lo.ToPtr(int(*req.Seed))
+	}
+	if req.FrequencyPenalty != nil {
+		result.FrequencyPenalty = req.FrequencyPenalty
+	}
+	if req.PresencePenalty != nil {
+		result.PresencePenalty = req.PresencePenalty
 	}
 
 	return result

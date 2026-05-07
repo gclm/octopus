@@ -18,6 +18,10 @@ var (
 	systemProxyClient  *http.Client
 	systemProxyURL     string
 	clientLock         sync.RWMutex
+
+	// 自定义代理客户端缓存 (proxyURL -> *http.Client)
+	customProxyClients = make(map[string]*http.Client)
+	customProxyLock    sync.RWMutex
 )
 
 // GetHTTPClientSystemProxy returns a cached http.Client.
@@ -78,13 +82,36 @@ func GetHTTPClientSystemProxy(useProxy bool) (*http.Client, error) {
 	return systemDirectClient, nil
 }
 
-// GetHTTPClientCustomProxy returns a NEW http.Client every time (no reuse).
+// GetHTTPClientCustomProxy returns a cached http.Client for the given proxy URL.
 // proxyURL supports: http, https, socks, socks5
 func GetHTTPClientCustomProxy(proxyURL string) (*http.Client, error) {
 	if proxyURL == "" {
 		return nil, fmt.Errorf("proxy url is empty")
 	}
-	return newHTTPClientCustomProxy(proxyURL)
+
+	// 先尝试读缓存
+	customProxyLock.RLock()
+	if client, ok := customProxyClients[proxyURL]; ok {
+		customProxyLock.RUnlock()
+		return client, nil
+	}
+	customProxyLock.RUnlock()
+
+	// 获取写锁并再次检查
+	customProxyLock.Lock()
+	defer customProxyLock.Unlock()
+
+	if client, ok := customProxyClients[proxyURL]; ok {
+		return client, nil
+	}
+
+	// 创建新客户端并缓存
+	client, err := newHTTPClientCustomProxy(proxyURL)
+	if err != nil {
+		return nil, err
+	}
+	customProxyClients[proxyURL] = client
+	return client, nil
 }
 
 func clonedDefaultTransport() (*http.Transport, error) {

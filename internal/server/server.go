@@ -1,8 +1,10 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/gclm/octopus/internal/conf"
 	"github.com/gclm/octopus/internal/relay/bodycache"
@@ -56,5 +58,14 @@ func Start() error {
 }
 
 func Close() error {
-	return httpSrv.Close()
+	// 优雅关闭：等待正在进行的请求完成，最多等待 30 秒
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	
+	log.Infof("shutting down HTTP server gracefully...")
+	if err := httpSrv.Shutdown(ctx); err != nil {
+		return fmt.Errorf("HTTP server forced to shutdown: %w", err)
+	}
+	log.Infof("HTTP server shutdown complete")
+	return nil
 }
