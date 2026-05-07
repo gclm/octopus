@@ -409,10 +409,8 @@
             "selectModel": "Model"
         },
         "mode": {
-            "roundRobin": "Round Robin",
-            "failover": "Failover",
-            "weighted": "Weighted",
-            "healthBased": "Health Based"
+            "fallback": "Failover",
+            "loadShare": "Load Balance"
         },
         "health": {
             "good": "Healthy",

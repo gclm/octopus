@@ -18,10 +18,8 @@ export interface GroupItem {
  * 分组模式
  */
 export enum GroupMode {
-    RoundRobin = 1,
-    Failover = 3,
-    Weighted = 4,
-    HealthBased = 5,
+    Fallback = 1,
+    LoadShare = 2,
 }
 
 /**

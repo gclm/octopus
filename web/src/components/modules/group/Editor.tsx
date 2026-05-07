@@ -446,7 +446,7 @@ export function GroupEditor({
 
                     {/* Mode */}
                     <div className="flex gap-1">
-                        {([1, 3, 4, 5] as const).map((m) => (
+                        {([1, 2] as const).map((m) => (
                             <button
                                 key={m}
                                 type="button"
@@ -476,7 +476,7 @@ export function GroupEditor({
                                 onRemove={handleRemoveMember}
                                 onWeightChange={handleWeightChange}
                                 removingIds={removingIds}
-                                showWeight={mode === 4}
+                                showWeight={mode === 2}
                                 onClear={handleClearMembers}
                             />
                         </div>

@@ -126,6 +126,13 @@ func RelayLogAdd(ctx context.Context, relayLog model.RelayLog) error {
 	// 使用异步 Sink（如果已初始化）
 	if enabled && logSink != nil {
 		logSink.Send(relayLog)
+		// 同时保留缓存用于实时查询
+		relayLogCacheLock.Lock()
+		relayLogCache = append(relayLogCache, relayLog)
+		if len(relayLogCache) > relayLogMaxSizeNoDB {
+			relayLogCache = relayLogCache[len(relayLogCache)-relayLogMaxSizeNoDB/2:]
+		}
+		relayLogCacheLock.Unlock()
 		return nil
 	}
 

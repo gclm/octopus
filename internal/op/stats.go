@@ -468,6 +468,25 @@ func StatsGetByRange(ctx context.Context, startDate, endDate string) (*StatsRang
 		response.HasTTFTCount += stat.HasFirstToken
 	}
 
+	// 合并当天的内存缓存
+	today := time.Now().Format("20060102")
+	statsDailyCacheLock.RLock()
+	if statsDailyCache.Date == today {
+		cache := statsDailyCache.StatsMetrics
+		response.RequestSuccess += cache.RequestSuccess
+		response.RequestFailed += cache.RequestFailed
+		response.InputTokens += cache.InputToken
+		response.OutputTokens += cache.OutputToken
+		response.InputCost += cache.InputCost
+		response.OutputCost += cache.OutputCost
+		response.TotalWaitTime += cache.WaitTime
+		response.CachedTokens += cache.CachedTokens
+		response.CachedCost += cache.CachedCost
+		response.TotalTTFT += cache.FirstTokenMs
+		response.HasTTFTCount += cache.HasFirstToken
+	}
+	statsDailyCacheLock.RUnlock()
+
 	response.RequestCount = response.RequestSuccess + response.RequestFailed
 	response.TotalTokens = response.InputTokens + response.OutputTokens
 	response.TotalCost = response.InputCost + response.OutputCost

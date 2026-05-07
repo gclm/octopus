@@ -409,10 +409,8 @@
             "selectModel": "模型"
         },
         "mode": {
-            "roundRobin": "輪詢",
-            "failover": "故障轉移",
-            "weighted": "加權分配",
-            "healthBased": "健康優先"
+            "fallback": "故障轉移",
+            "loadShare": "負載均衡"
         },
         "health": {
             "good": "健康",

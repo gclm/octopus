@@ -79,11 +79,11 @@ export function GroupCard({ group }: { group: Group }) {
     const weightTimerRef = useRef<NodeJS.Timeout | null>(null);
     const membersRef = useRef<SelectedMember[]>([]);
 
-    const isHealthBased = group.mode === GroupMode.HealthBased;
+    const isLoadShare = group.mode === GroupMode.LoadShare;
     const healthItems = useMemo(() =>
         (group.items ?? []).map((it) => ({ channel_id: it.channel_id, model_name: it.model_name })),
         [group.items]);
-    const { data: healthMap } = useGroupHealth(isHealthBased ? healthItems : undefined);
+    const { data: healthMap } = useGroupHealth(isLoadShare ? healthItems : undefined);
 
     const channelNameByKey = useMemo(() => buildChannelNameByModelKey(modelChannels), [modelChannels]);
     const enabledByKey = useMemo(() => {
@@ -321,7 +321,7 @@ export function GroupCard({ group }: { group: Group }) {
 
             {/* Mode: quick switch (no need to enter Edit) */}
             <div className="flex gap-1 mb-3">
-                {([GroupMode.RoundRobin, GroupMode.Failover, GroupMode.Weighted, GroupMode.HealthBased] as const).map((m) => (
+                {([GroupMode.Fallback, GroupMode.LoadShare] as const).map((m) => (
                     <button
                         key={m}
                         type="button"
@@ -353,8 +353,8 @@ export function GroupCard({ group }: { group: Group }) {
                     onDrop={handleDropReorder}
                     onDragFinish={handleDragFinish}
                     autoScrollOnAdd={false}
-                    showWeight={group.mode === GroupMode.Weighted}
-                    showHealth={isHealthBased}
+                    showWeight={group.mode === GroupMode.LoadShare}
+                    showHealth={isLoadShare}
                     healthMap={healthMap}
                     layoutScope={`card-${group.id ?? 'unknown'}`}
                 />

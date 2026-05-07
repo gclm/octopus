@@ -7,22 +7,6 @@ const (
 	GroupModeLoadShare GroupMode = 2 // 负载均衡：按权重分配，自动结合健康分降级
 )
 
-// legacyToNewMode 旧模式到新模式的映射
-var legacyToNewMode = map[GroupMode]GroupMode{
-	1: GroupModeFallback,  // 轮询 → 故障转移
-	3: GroupModeFallback,  // 故障转移 → 故障转移
-	4: GroupModeLoadShare, // 加权分配 → 负载均衡
-	5: GroupModeLoadShare, // 健康优先 → 负载均衡
-}
-
-// NormalizeGroupMode 将旧模式值映射为新模式值
-func NormalizeGroupMode(mode GroupMode) GroupMode {
-	if newMode, ok := legacyToNewMode[mode]; ok {
-		return newMode
-	}
-	return GroupModeFallback // 默认
-}
-
 type Group struct {
 	ID                int         `json:"id" gorm:"primaryKey"`
 	Name              string      `json:"name" gorm:"unique;not null"`
