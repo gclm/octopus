@@ -343,6 +343,22 @@ export function GroupCard({ group }: { group: Group }) {
                 ))}
             </div>
 
+            {isLoadShare && (
+                <div className="flex items-center gap-3 mb-2 px-1">
+                    {(['good', 'warning', 'bad', 'garbage'] as const).map((level) => (
+                        <span key={level} className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                            <span className={cn('size-1.5 rounded-full', {
+                                'bg-emerald-500': level === 'good',
+                                'bg-amber-500': level === 'warning',
+                                'bg-orange-500': level === 'bad',
+                                'bg-red-500': level === 'garbage',
+                            })} />
+                            {t(`health.${level}`)}
+                        </span>
+                    ))}
+                </div>
+            )}
+
             <section className="rounded-xl border border-border/50 bg-muted/30 overflow-hidden relative h-101">
                 <MemberList
                     members={visibleMembers}

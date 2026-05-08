@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Layers, GripVertical, X, Trash2 } from 'lucide-react';
 import {
     DragDropContext,
@@ -45,7 +45,7 @@ function HealthBadge({ health }: { health?: HealthInfo }) {
     if (!health) {
         return (
             <span className={cn('shrink-0 px-1.5 py-0.5 text-[10px] font-medium rounded-md', healthLevelColors.unknown)}>
-                {t('health.unknown')}
+                --
             </span>
         );
     }
@@ -53,13 +53,76 @@ function HealthBadge({ health }: { health?: HealthInfo }) {
     return (
         <Tooltip>
             <TooltipTrigger asChild>
-                <span className={cn('shrink-0 px-1.5 py-0.5 text-[10px] font-medium rounded-md cursor-default', healthLevelColors[level])}>
-                    {t(`health.${level}`)} {health.score}
+                <span className={cn('shrink-0 px-1.5 py-0.5 text-[10px] font-mono font-medium rounded-md cursor-default tabular-nums', healthLevelColors[level])}>
+                    {health.score}
                 </span>
             </TooltipTrigger>
             <TooltipContent>
-                {health.success_count}✓ {health.failure_count}✗ · {health.avg_latency_ms}ms
+                {t(`health.${level}`)} · {health.success_count}✓ {health.failure_count}✗ · {health.avg_latency_ms}ms
             </TooltipContent>
+        </Tooltip>
+    );
+}
+
+function InlineEditWeight({ value, onChange, disabled }: { value: number; onChange: (v: number) => void; disabled?: boolean }) {
+    const t = useTranslations('group');
+    const [editing, setEditing] = useState(false);
+    const [draft, setDraft] = useState(value);
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    const startEdit = useCallback(() => {
+        if (disabled) return;
+        setDraft(value);
+        setEditing(true);
+        requestAnimationFrame(() => inputRef.current?.select());
+    }, [disabled, value]);
+
+    const confirm = useCallback(() => {
+        setEditing(false);
+        const next = Math.max(1, draft);
+        if (next !== value) onChange(next);
+    }, [draft, onChange, value]);
+
+    const cancel = useCallback(() => {
+        setEditing(false);
+        setDraft(value);
+    }, [value]);
+
+    if (editing) {
+        return (
+            <input
+                ref={inputRef}
+                type="number"
+                min={1}
+                value={draft}
+                onChange={(e) => setDraft(Math.max(1, parseInt(e.target.value) || 1))}
+                onBlur={confirm}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter') confirm();
+                    if (e.key === 'Escape') cancel();
+                }}
+                className="w-9 h-[18px] text-[10px] text-center rounded border border-primary bg-background text-foreground outline-none focus:ring-1 focus:ring-primary"
+            />
+        );
+    }
+
+    return (
+        <Tooltip>
+            <TooltipTrigger asChild>
+                <button
+                    type="button"
+                    onClick={startEdit}
+                    className={cn(
+                        'shrink-0 px-1.5 py-0.5 text-[10px] font-mono font-medium rounded-md tabular-nums transition-colors',
+                        disabled
+                            ? 'cursor-default bg-muted text-muted-foreground'
+                            : 'cursor-pointer bg-muted/60 text-muted-foreground hover:bg-muted'
+                    )}
+                >
+                    {value}
+                </button>
+            </TooltipTrigger>
+            <TooltipContent>{t('weight')}: {value}</TooltipContent>
         </Tooltip>
     );
 }
@@ -153,20 +216,53 @@ function MemberItem({
                     <ModelAvatar size={18} />
                 </span>
 
-                <div className="flex flex-col min-w-0 flex-1">
-                    <Tooltip side="top" sideOffset={10} align="start">
-                        <TooltipTrigger className={cn(
-                            'text-sm font-medium truncate leading-tight',
-                            isDisabled && 'text-muted-foreground'
-                        )}>
-                            {member.name}
-                        </TooltipTrigger>
-                        <TooltipContent key={member.name}>{member.name}</TooltipContent>
-                    </Tooltip>
-                    <span className="text-[10px] text-muted-foreground truncate leading-tight">{member.channel_name}</span>
-                </div>
+                {showWeight && showHealth ? (
+                    <>
+                        <div className="flex-1 min-w-0">
+                            <Tooltip side="top" sideOffset={10} align="start">
+                                <TooltipTrigger className={cn(
+                                    'text-sm font-medium truncate leading-tight block',
+                                    isDisabled && 'text-muted-foreground'
+                                )}>
+                                    {member.name}
+                                </TooltipTrigger>
+                                <TooltipContent key={member.name}>{member.name}</TooltipContent>
+                            </Tooltip>
+                            <div className="flex items-center gap-1 text-[10px] text-muted-foreground leading-tight mt-0.5">
+                                <span className="truncate">{member.channel_name}</span>
+                                {healthInfo && healthInfo.avg_latency_ms > 0 && (
+                                    <>
+                                        <span className="text-border/50">·</span>
+                                        <span>{healthInfo.avg_latency_ms}ms</span>
+                                    </>
+                                )}
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                            <HealthBadge health={healthInfo} />
+                            <InlineEditWeight
+                                value={member.weight ?? 1}
+                                onChange={(w) => onWeightChange?.(member.id, w)}
+                                disabled={isDisabled}
+                            />
+                        </div>
+                    </>
+                ) : (
+                    <div className="flex flex-col min-w-0 flex-1">
+                        <Tooltip side="top" sideOffset={10} align="start">
+                            <TooltipTrigger className={cn(
+                                'text-sm font-medium truncate leading-tight',
+                                isDisabled && 'text-muted-foreground'
+                            )}>
+                                {member.name}
+                            </TooltipTrigger>
+                            <TooltipContent key={member.name}>{member.name}</TooltipContent>
+                        </Tooltip>
+                        <span className="text-[10px] text-muted-foreground truncate leading-tight">{member.channel_name}</span>
+                    </div>
+                )}
 
-                {showWeight && (
+                {showWeight && !showHealth && (
                     <input
                         type="number"
                         min={1}
@@ -178,8 +274,6 @@ function MemberItem({
                         )}
                     />
                 )}
-
-                {showHealth && <HealthBadge health={healthInfo} />}
 
                 {(!showConfirmDelete || !confirmDelete) && (
                     <motion.button

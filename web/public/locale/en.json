@@ -417,9 +417,11 @@
             "warning": "Watching",
             "bad": "Isolated",
             "garbage": "Unusable",
-            "unknown": "Unknown"
+            "unknown": "Unknown",
+            "notObserved": "Not observed"
         },
-        "empty": "No groups yet, click the button above to create one"
+        "empty": "No groups yet, click the button above to create one",
+        "weight": "Weight"
     },
     "model": {
         "create": {
