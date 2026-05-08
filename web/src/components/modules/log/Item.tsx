@@ -257,7 +257,10 @@ export function LogCard({ log }: { log: RelayLog }) {
                                     <Pin className="size-3.5 shrink-0 text-amber-500" />
                                 )}
                             </div>
-                            <div className="grid grid-cols-2 md:grid-cols-7 gap-x-4 gap-y-2 text-xs tabular-nums text-muted-foreground">
+                            <div className={cn(
+                                "grid grid-cols-2 gap-x-4 gap-y-2 text-xs tabular-nums text-muted-foreground",
+                                hasMultipleAttempts ? "md:grid-cols-8" : "md:grid-cols-7"
+                            )}>
                                 <div className="flex items-center gap-1.5">
                                     <Clock className="size-3.5 shrink-0" style={{ color: brandColor }} />
                                     <span>{formatTime(log.time)}</span>
@@ -268,6 +271,12 @@ export function LogCard({ log }: { log: RelayLog }) {
                                         <span className="truncate" title={requestAPIKeyName}>
                                             {requestAPIKeyName}
                                         </span>
+                                    </div>
+                                )}
+                                {hasMultipleAttempts && (
+                                    <div className="flex items-center gap-1.5">
+                                        <RotateCw className="size-3.5 shrink-0 text-amber-500" />
+                                        <span>{t('retries')} {log.total_attempts || log.attempts!.length} {t('attempts')}</span>
                                     </div>
                                 )}
                                 <div className="flex items-center gap-1.5">
@@ -486,6 +495,12 @@ export function LogCard({ log }: { log: RelayLog }) {
                                     <span className="truncate" title={requestAPIKeyName}>
                                         {requestAPIKeyName}
                                     </span>
+                                </div>
+                            )}
+                            {hasMultipleAttempts && (
+                                <div className="flex items-center gap-1.5">
+                                    <RotateCw className="size-3.5 text-amber-500" />
+                                    <span>{t('retries')}: {log.total_attempts || log.attempts!.length} {t('attempts')}</span>
                                 </div>
                             )}
                             <div className="flex items-center gap-1.5">

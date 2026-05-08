@@ -476,6 +476,7 @@
             "firstTokenTime": "First Token Time",
             "tokens": "tokens",
             "retryDetails": "Retry Details",
+            "retries": "Retries",
             "attempts": "attempts",
             "success": "Success",
             "failed": "Failed"

@@ -202,10 +202,9 @@ func Handler(inboundType inbound.InboundType, c *gin.Context) {
 				continue
 			}
 
-			// 网络错误（StatusCode=0）：标记后重试
+			// 网络错误（StatusCode=0）：同 key 重试一次
 			if result.StatusCode == 0 {
 				log.Warnf("channel %s key %d network error, retrying same key: %v", channel.Name, usedKey.ID, result.Err)
-				triedKeys[usedKey.ID] = struct{}{}
 				networkRetry = true
 				time.Sleep(200 * time.Millisecond)
 				continue
