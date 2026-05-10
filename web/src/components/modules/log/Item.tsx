@@ -253,13 +253,19 @@ export function LogCard({ log }: { log: RelayLog }) {
                                     {log.actual_model_name}
                                 </span>
                                 <RequestIdBadge requestId={log.request_id} clientRequestId={log.client_request_id} />
+                                {hasMultipleAttempts && (
+                                    <span className="shrink-0 inline-flex items-center gap-0.5 text-[10px] text-amber-600 dark:text-amber-400 bg-amber-500/10 rounded px-1.5 py-0.5">
+                                        <RotateCw className="size-3" />
+                                        {log.total_attempts || log.attempts!.length}{t('attempts')}
+                                    </span>
+                                )}
                                 {log.attempts?.some(a => a.sticky) && (
                                     <Pin className="size-3.5 shrink-0 text-amber-500" />
                                 )}
                             </div>
                             <div className={cn(
                                 "grid grid-cols-2 gap-x-4 gap-y-2 text-xs tabular-nums text-muted-foreground",
-                                hasMultipleAttempts ? "md:grid-cols-8" : "md:grid-cols-7"
+                                requestAPIKeyName ? "md:grid-cols-7" : "md:grid-cols-6"
                             )}>
                                 <div className="flex items-center gap-1.5">
                                     <Clock className="size-3.5 shrink-0" style={{ color: brandColor }} />
@@ -271,12 +277,6 @@ export function LogCard({ log }: { log: RelayLog }) {
                                         <span className="truncate" title={requestAPIKeyName}>
                                             {requestAPIKeyName}
                                         </span>
-                                    </div>
-                                )}
-                                {hasMultipleAttempts && (
-                                    <div className="flex items-center gap-1.5">
-                                        <RotateCw className="size-3.5 shrink-0 text-amber-500" />
-                                        <span>{t('retries')} {log.total_attempts || log.attempts!.length} {t('attempts')}</span>
                                     </div>
                                 )}
                                 <div className="flex items-center gap-1.5">
@@ -495,12 +495,6 @@ export function LogCard({ log }: { log: RelayLog }) {
                                     <span className="truncate" title={requestAPIKeyName}>
                                         {requestAPIKeyName}
                                     </span>
-                                </div>
-                            )}
-                            {hasMultipleAttempts && (
-                                <div className="flex items-center gap-1.5">
-                                    <RotateCw className="size-3.5 text-amber-500" />
-                                    <span>{t('retries')}: {log.total_attempts || log.attempts!.length} {t('attempts')}</span>
                                 </div>
                             )}
                             <div className="flex items-center gap-1.5">
