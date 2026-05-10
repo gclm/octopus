@@ -9,7 +9,9 @@ LD_FLAGS    := -X github.com/gclm/octopus/internal/conf.Version=$(VERSION) \
                -X github.com/gclm/octopus/internal/conf.BuildTime=$(BUILD_TIME) \
                -X github.com/gclm/octopus/internal/conf.Author=$(AUTHOR)
 
-.PHONY: dev build build-be build-fe run clean test lint
+BREW_BIN     := $(shell brew --prefix octopus 2>/dev/null)/bin/octopus
+
+.PHONY: dev build build-be build-fe run clean test lint release-brew
 
 # 构建全部（前端 + 后端）
 build: build-fe build-be
@@ -49,3 +51,10 @@ lint:
 # 清理构建产物
 clean:
 	rm -rf static/out web/out web/.next $(BINARY)
+
+# 构建并替换本地 brew 安装的二进制
+release-brew: build
+	@if [ ! -f "$(BREW_BIN)" ]; then echo "Error: brew octopus not installed"; exit 1; fi
+	cp -f $(BINARY) $(BREW_BIN)
+	@echo "Replaced $(BREW_BIN)"
+	@echo "brew services restart gclm/tap/octopus"

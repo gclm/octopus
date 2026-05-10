@@ -547,7 +547,11 @@ func (c MessageContent) MarshalJSON() ([]byte, error) {
 		return json.Marshal(c.MultipleContent)
 	}
 
-	return json.Marshal(c.Content)
+	if c.Content != nil {
+		return json.Marshal(c.Content)
+	}
+
+	return []byte(`""`), nil
 }
 
 func (c *MessageContent) UnmarshalJSON(data []byte) error {

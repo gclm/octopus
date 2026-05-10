@@ -159,41 +159,38 @@ func (i *MessagesInbound) TransformRequest(ctx context.Context, body []byte) (*m
 					}
 				case "tool_result":
 					hasToolResult = true
-					// TODO: support other result types
-					if block.Content != nil {
-						toolMsg := model.Message{
-							Role:            "tool",
-							MessageIndex:    lo.ToPtr(msgIndex),
-							ToolCallID:      block.ToolUseID,
-							CacheControl:    convertToLLMCacheControl(block.CacheControl),
-							ToolCallIsError: block.IsError,
-						}
+					toolMsg := model.Message{
+						Role:            "tool",
+						MessageIndex:    lo.ToPtr(msgIndex),
+						ToolCallID:      block.ToolUseID,
+						CacheControl:    convertToLLMCacheControl(block.CacheControl),
+						ToolCallIsError: block.IsError,
+					}
 
+					if block.Content != nil {
 						if block.Content.Content != nil {
 							toolMsg.Content = model.MessageContent{
 								Content: block.Content.Content,
 							}
 						} else if len(block.Content.MultipleContent) > 0 {
-							// Handle multiple content blocks in tool_result
-							// Keep as MultipleContent to preserve the original format
-							toolContentParts := make([]model.MessageContentPart, 0, len(block.Content.MultipleContent))
 							for _, contentBlock := range block.Content.MultipleContent {
 								if contentBlock.Type == "text" {
-									toolContentParts = append(toolContentParts, model.MessageContentPart{
-										Type: "text",
-										Text: contentBlock.Text,
-									})
+									toolMsg.Content = model.MessageContent{
+										Content: contentBlock.Text,
+									}
 									i.inputToken += int64(tokenizer.CountTokens(*contentBlock.Text, chatReq.Model))
+									break
 								}
 							}
-
-							toolMsg.Content = model.MessageContent{
-								MultipleContent: toolContentParts,
-							}
 						}
-
-						messages = append(messages, toolMsg)
 					}
+
+					if toolMsg.Content.Content == nil {
+						emptyStr := ""
+						toolMsg.Content = model.MessageContent{Content: &emptyStr}
+					}
+
+					messages = append(messages, toolMsg)
 				case "tool_use":
 					chatMsg.ToolCalls = append(chatMsg.ToolCalls, model.ToolCall{
 						ID:   block.ID,
